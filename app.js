@@ -1,10 +1,13 @@
 /**
- * v2: Auto-atvēršana ir izslēgta pēc noklusējuma un nekad netraucē izveides sākumā.
- * Auto režīms strādā tikai tad, ja:
- *  - lietotājs pats ieslēdz toggle “Auto-atvērt tuvāko” (Map tab)
- *  - un ir vismaz 1 objekts ar LAT/LNG
- *  - un tuvākais ir tuvāk par norādīto rādiusu (noklusējums 80m)
- *  - un ir pagājušas vismaz 15s kopš pēdējās automātiskās pārslēgšanās (debounce)
+ * FINAL: 
+ * - Pie ADRESE/LOKĀCIJA ir poga “Rādīt kartē”:
+ *   - ja ir LAT/LNG -> uzreiz fokusē kartē
+ *   - ja nav -> geocode pēc adreses, saglabā LAT/LNG, un fokusē kartē
+ *
+ * - Kartē var ielikt koordinātes ar long-press (Leaflet 'contextmenu' notikums):
+ *   - ilgi turi pirkstu uz kartes -> LAT/LNG tiek ielikti pašreizējam objektam un saglabāti
+ *
+ * - Auto režīms (ja ieslēdz) atver tuvākā objekta popup tikai kartes skatā un netraucē izveides sākumā.
  */
 
 const STORAGE_KEY_OBJECTS = "objekti_v1";
@@ -40,7 +43,7 @@ function loadObjects(){
     const raw = localStorage.getItem(STORAGE_KEY_OBJECTS);
     if (raw) return JSON.parse(raw);
   } catch {}
-  // demo
+  // demo (vari izdzēst)
   return [{
     id: uid(),
     ADRESE_LOKACIJA: "Fridriha Candera 24, Rīga",
@@ -103,6 +106,25 @@ function buildForm(root, obj){
 
     wrap.appendChild(label);
     wrap.appendChild(input);
+
+    // Pie adreses – poga "Rādīt kartē"
+    if (f.key === "ADRESE_LOKACIJA") {
+      const row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.gap = "8px";
+      row.style.marginTop = "8px";
+      row.style.flexWrap = "wrap";
+
+      const btnShow = document.createElement("button");
+      btnShow.type = "button";
+      btnShow.className = "btn primary";
+      btnShow.textContent = "Rādīt kartē";
+      btnShow.addEventListener("click", () => showCurrentOnMap());
+
+      row.appendChild(btnShow);
+      wrap.appendChild(row);
+    }
+
     root.appendChild(wrap);
   }
 }
@@ -121,7 +143,6 @@ let currentId = null;
 
 // ---------- Tabs ----------
 let activeTab = "card";
-
 function switchTab(name){
   activeTab = name;
   for (const el of document.querySelectorAll(".panel")) el.classList.add("hidden");
@@ -134,7 +155,6 @@ function switchTab(name){
     ensureMap();
     setTimeout(() => map.invalidateSize(), 50);
     refreshMarkers();
-    // auto režīms darbojas tikai kartes skatā (t.i., “darba beigās”)
     maybeStartAutoWatch();
   } else {
     stopAutoWatch();
@@ -167,7 +187,6 @@ function createNewObject(){
   setStatus("Izveidots jauns objekts.");
   refreshList();
   refreshMarkers();
-  // Svarīgi: auto režīms netiek palaists un netiek veikta automātiska pārslēgšanās izveides brīdī.
 }
 
 function deleteCurrent(){
@@ -250,6 +269,52 @@ async function geocodeAddress(address){
   return { lat: Number(arr[0].lat), lng: Number(arr[0].lon) };
 }
 
+// ---------- Show current on map (address -> coords -> map) ----------
+async function showCurrentOnMap(){
+  const obj = getCurrentObject(objects, currentId);
+  if (!obj) return;
+
+  switchTab("map");
+  ensureMap();
+  refreshMarkers();
+
+  let c = parseLatLng(obj);
+  if (c){
+    focusObjectOnMap(obj);
+    setStatus("Parādīts kartē.");
+    return;
+  }
+
+  const address = (obj.ADRESE_LOKACIJA || "").trim();
+  if (!address){
+    setStatus("Nav adreses, ko rādīt kartē.");
+    return;
+  }
+
+  try{
+    setStatus("Nav LAT/LNG — meklēju koordinātes pēc adreses…");
+    const geo = await geocodeAddress(address);
+    if (!geo){
+      setStatus("Koordinātes neatradu. Precizē adresi vai ieliec LAT/LNG manuāli.");
+      return;
+    }
+
+    obj.LAT = String(geo.lat);
+    obj.LNG = String(geo.lng);
+    saveObjects(objects);
+
+    const latEl = $("LAT"); const lngEl = $("LNG");
+    if (latEl) latEl.value = String(geo.lat);
+    if (lngEl) lngEl.value = String(geo.lng);
+
+    refreshMarkers();
+    focusObjectOnMap(obj);
+    setStatus("Koordinātes atrastas un parādīts kartē.");
+  } catch {
+    setStatus("Geocoding neizdevās (internets / serviss).");
+  }
+}
+
 // ---------- List ----------
 function refreshList(){
   const root = $("listRoot");
@@ -324,6 +389,26 @@ function ensureMap(){
   }).addTo(map);
 
   markersLayer = L.layerGroup().addTo(map);
+
+  // Long-press / right click => ieliek LAT/LNG pašreizējam objektam
+  map.on("contextmenu", (e) => {
+    const obj = getCurrentObject(objects, currentId);
+    if (!obj) return;
+
+    const lat = e.latlng.lat;
+    const lng = e.latlng.lng;
+
+    obj.LAT = String(lat);
+    obj.LNG = String(lng);
+    saveObjects(objects);
+
+    const latEl = $("LAT"); const lngEl = $("LNG");
+    if (latEl) latEl.value = String(lat);
+    if (lngEl) lngEl.value = String(lng);
+
+    refreshMarkers();
+    setMapStatus(`Ielikts LAT/LNG no kartes: ${lat.toFixed(6)}, ${lng.toFixed(6)} (objekts saglabāts).`);
+  });
 }
 
 function escapeHtml(s){
@@ -425,24 +510,18 @@ async function findNearestToMeAndOpenOnMap(){
   focusObjectOnMap(best.o);
 }
 
-// ---------- Auto-open (only when enabled AND on map tab) ----------
+// ---------- Auto-open (popup only, map tab only) ----------
 let watchId = null;
 let lastAutoSwitchAt = 0;
 
-function isAutoEnabled(){
-  return localStorage.getItem(STORAGE_KEY_AUTOMODE) === "1";
-}
-function setAutoEnabled(on){
-  localStorage.setItem(STORAGE_KEY_AUTOMODE, on ? "1" : "0");
-}
+function isAutoEnabled(){ return localStorage.getItem(STORAGE_KEY_AUTOMODE) === "1"; }
+function setAutoEnabled(on){ localStorage.setItem(STORAGE_KEY_AUTOMODE, on ? "1" : "0"); }
 function getAutoRadius(){
   const raw = localStorage.getItem(STORAGE_KEY_AUTORADIUS);
   const n = Number(raw);
   return Number.isFinite(n) && n >= 20 ? n : 80;
 }
-function setAutoRadius(n){
-  localStorage.setItem(STORAGE_KEY_AUTORADIUS, String(n));
-}
+function setAutoRadius(n){ localStorage.setItem(STORAGE_KEY_AUTORADIUS, String(n)); }
 
 function maybeStartAutoWatch(){
   if (activeTab !== "map") return;
@@ -453,41 +532,33 @@ function maybeStartAutoWatch(){
     return;
   }
 
-  watchId = navigator.geolocation.watchPosition(async (pos) => {
-    try{
-      const now = Date.now();
-      if (now - lastAutoSwitchAt < AUTO_COOLDOWN_MS) return;
+  watchId = navigator.geolocation.watchPosition((pos) => {
+    const now = Date.now();
+    if (now - lastAutoSwitchAt < AUTO_COOLDOWN_MS) return;
 
-      const me = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
-      ensureMap();
+    const me = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
+    ensureMap();
 
-      if (!meMarker){
-        meMarker = L.circleMarker([me.lat, me.lng], { radius: 8 });
-        meMarker.addTo(map);
-      } else {
-        meMarker.setLatLng([me.lat, me.lng]);
-      }
-
-      const best = findNearestTo(me.lat, me.lng);
-      if (!best) return;
-
-      const radius = getAutoRadius();
-      if (best.d > radius) {
-        setMapStatus(`Auto: tuvākais ${Math.round(best.d)}m (ārpus ${radius}m).`);
-        return;
-      }
-
-      // Auto-atver tikai kartē (popup), nevis pārslēdz uz kartītes tab uzreiz
-      lastAutoSwitchAt = now;
-      setMapStatus(`Auto: atrasts tuvākais ~${Math.round(best.d)}m (popup atvērts).`);
-      focusObjectOnMap(best.o);
-
-      // “Darba beigās” vari nospiest popupā “Atvērt”, ja tiešām vajag kartīti.
-      // (Tieši kā tu gribēji — nevis uzreiz, bet tikai beigās / pēc izvēles.)
-    } catch {
-      // klusām
+    if (!meMarker){
+      meMarker = L.circleMarker([me.lat, me.lng], { radius: 8 });
+      meMarker.addTo(map);
+    } else {
+      meMarker.setLatLng([me.lat, me.lng]);
     }
-  }, (err) => {
+
+    const best = findNearestTo(me.lat, me.lng);
+    if (!best) return;
+
+    const radius = getAutoRadius();
+    if (best.d > radius) {
+      setMapStatus(`Auto: tuvākais ${Math.round(best.d)}m (ārpus ${radius}m).`);
+      return;
+    }
+
+    lastAutoSwitchAt = now;
+    setMapStatus(`Auto: atrasts tuvākais ~${Math.round(best.d)}m (popup atvērts).`);
+    focusObjectOnMap(best.o);
+  }, () => {
     setMapStatus("Auto: lokācija nav pieejama (atļaujas / GPS).");
   }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 });
 }

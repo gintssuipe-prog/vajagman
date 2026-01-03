@@ -48,8 +48,8 @@
       </div>
 
       <div class="hint">
-        “Auto-atvēršana” ir <b>izslēgta</b> pēc noklusējuma. Ieslēdz to tikai tad, kad katalogs ir sapildīts un gribi,
-        lai aplikācija pati pārslēdzas uz tuvāko objektu (skat. “Karte”).
+        Ātrais darbs: pie <b>ADRESE/LOKĀCIJA</b> ir poga <b>“Rādīt kartē”</b>. Ja LAT/LNG nav, tā pati mēģinās
+        atrast koordinātes un uzreiz parādīs objektu kartē.
       </div>
     </section>
 
@@ -57,11 +57,13 @@
       <div class="row wrap">
         <button id="btnCenterMe" class="btn">Centrēt uz mani</button>
         <button id="btnFindNearest" class="btn primary">Atrast tuvāko objektu</button>
+
         <label class="toggle">
           <input type="checkbox" id="autoOpenToggle" />
           <span>Auto-atvērt tuvāko (<= <input id="autoRadius" class="radius" type="number" min="20" step="10" value="80"> m)</span>
         </label>
-        <span id="mapStatus" class="status">Gatavs.</span>
+
+        <span id="mapStatus" class="status">Padoms: ilgi turi pirkstu uz kartes (long-press), lai ieliktu LAT/LNG pašreizējam objektam.</span>
       </div>
       <div id="map" class="map"></div>
     </section>
