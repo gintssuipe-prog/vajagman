@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="lv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Objektu katalogs</title>
+
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="stylesheet" href="./style.css" />
+
+  <!-- Leaflet (karte bez API atslēgas) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""/>
+</head>
+<body>
+  <main class="phone">
+    <header class="topbar">
+      <div>
+        <h1>Objektu katalogs</h1>
+        <div class="sub">PWA prototips: kartīte + karte + “atrast tuvāko”</div>
+      </div>
+      <div class="actions">
+        <button id="btnSave" class="btn primary">Saglabāt</button>
+        <button id="btnNew" class="btn">Jauns</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="card">Kartīte</button>
+      <button class="tab" data-tab="map">Karte</button>
+      <button class="tab" data-tab="list">Saraksts</button>
+    </nav>
+
+    <section class="panel" id="tab-card">
+      <div class="row">
+        <select id="objectPicker" class="select"></select>
+        <button id="btnDelete" class="btn danger">Dzēst</button>
+      </div>
+
+      <section class="card" id="formRoot"></section>
+
+      <div class="row wrap">
+        <button id="btnHere" class="btn">Esmu šeit → atrast tuvāko</button>
+        <button id="btnGeocode" class="btn">Aprēķināt koordinātes no adreses</button>
+        <button id="btnOpenMaps" class="btn">Atvērt Google Maps</button>
+      </div>
+
+      <div class="hint">
+        “Auto-atvēršana” ir <b>izslēgta</b> pēc noklusējuma. Ieslēdz to tikai tad, kad katalogs ir sapildīts un gribi,
+        lai aplikācija pati pārslēdzas uz tuvāko objektu (skat. “Karte”).
+      </div>
+    </section>
+
+    <section class="panel hidden" id="tab-map">
+      <div class="row wrap">
+        <button id="btnCenterMe" class="btn">Centrēt uz mani</button>
+        <button id="btnFindNearest" class="btn primary">Atrast tuvāko objektu</button>
+        <label class="toggle">
+          <input type="checkbox" id="autoOpenToggle" />
+          <span>Auto-atvērt tuvāko (<= <input id="autoRadius" class="radius" type="number" min="20" step="10" value="80"> m)</span>
+        </label>
+        <span id="mapStatus" class="status">Gatavs.</span>
+      </div>
+      <div id="map" class="map"></div>
+    </section>
+
+    <section class="panel hidden" id="tab-list">
+      <div class="row">
+        <input id="search" class="input" placeholder="Meklēt pēc adreses / objekta nr..." />
+        <button id="btnExport" class="btn">Eksports JSON</button>
+      </div>
+      <div id="listRoot" class="list"></div>
+      <textarea id="exportBox" class="export hidden" readonly></textarea>
+    </section>
+
+    <footer class="footer">
+      <span id="status">Gatavs.</span>
+    </footer>
+  </main>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+          crossorigin=""></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>
