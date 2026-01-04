@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v1.1.9";
+const APP_VERSION = "v1.2.0";
 const APP_DATE = "2026-01-04";
 
 const STORAGE_KEY_OBJECTS = "vajagman_objects_v3";
@@ -112,24 +112,15 @@ function hasMeaningfulData(obj){
   return keys.some(k => String(obj[k] || "").trim().length > 0);
 }
 
-function renderHeaderActions(){
-  const root = $("hdrActions");
-  root.innerHTML = "";
 
-  const btnSave = document.createElement("button");
-  btnSave.id = "btnSave";
-  btnSave.className = "btn";
-  btnSave.textContent = "SAGLABĀT";
-  btnSave.onclick = saveWorking;
+function wireRecordActions(){
+  const btnSave = $("btnSave");
+  const btnNew = $("btnNew");
+  const btnVal = $("btnValidateAddress");
 
-  const btnNew = document.createElement("button");
-  btnNew.id = "btnNew";
-  btnNew.className = "btn success";
-  btnNew.textContent = "JAUNS";
-  btnNew.onclick = createNewRecord;
-
-  root.appendChild(btnSave);
-  root.appendChild(btnNew);
+  if (btnSave) btnSave.onclick = saveWorking;
+  if (btnNew) btnNew.onclick = createNewRecord;
+  if (btnVal) btnVal.onclick = validateAddress;
 
   refreshSaveButton();
 }
@@ -723,7 +714,7 @@ document.addEventListener("DOMContentLoaded", () => {
   addrSystemIds = loadAddrSystemIds();
   currentId = loadCurrentId();
 
-  renderHeaderActions();
+  wireRecordActions();
 
   // Address wire-up
   wireAddressInput();

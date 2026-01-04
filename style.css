@@ -244,3 +244,21 @@ body{
 .hdr{
   box-shadow: 0 6px 12px rgba(0,0,0,0.35);
 }
+
+
+/* Record-only action bar (visible only in IERAKSTS tab) */
+.recordActions{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom: 10px;
+}
+.recordActionsRight{
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+
+/* Header: actions removed */
+.hdrTop{ justify-content:flex-start; }
