@@ -1,4 +1,4 @@
-const APP_VERSION = "v1.1.6";
+const APP_VERSION = "v1.1.7";
 const APP_DATE = "2026-01-04";
 
 // Storage
@@ -163,7 +163,20 @@ function setWorking(o, isNew){
   workingIsNew = !!isNew;
   dirtyFields.clear();
   updateCtxTitle();
+  buildAddressTop($("addressTop"), working);
   buildForm($("formRoot"), working);
+
+  // Mini map header actions: Address validation lives in the map block
+  const mh = $("miniHdrActions");
+  if (mh){
+    mh.innerHTML = "";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn";
+    btn.textContent = "ADRESES VALIDĀCIJA";
+    btn.addEventListener("click", validateAddress);
+    mh.appendChild(btn);
+  }
   applySystemAddressStyle();
   setStatus(workingIsNew ? "Jauns ieraksts (nav saglabāts)." : "Gatavs.");
   updateMiniMap();
@@ -226,6 +239,8 @@ function discardUnsavedChangesIfNeeded(){
 function buildForm(root, obj){
   root.innerHTML = "";
   for (const f of schema){
+    if (f.key === "ADRESE_LOKACIJA") continue;
+
     const wrap = document.createElement("div");
     wrap.className = "field";
     wrap.dataset.key = f.key;
@@ -250,46 +265,62 @@ function buildForm(root, obj){
     input.addEventListener("input", () => {
       if (!working) return;
       working[f.key] = input.value;
-      if (f.key === "ADRESE_LOKACIJA"){
-        // If user edits the address manually, it is no longer "system-validated"
-        if (workingIsNew){
-          working.__addrSystem = false;
-        } else {
-          addrSystemIds.delete(working.id);
-          saveAddrSystemIds();
-        }
-        applySystemAddressStyle();
-      }
+
       markDirty(f.key);
       updateCtxTitle();
       updateMiniMapDebounced();
     });
 
     wrap.appendChild(label);
-
-    if (f.key === "ADRESE_LOKACIJA"){
-      // Horizontal layout: [address input] [ADRESES VALIDĀCIJA]
-      wrap.classList.add("addressRow");
-
-      const row = document.createElement("div");
-      row.className = "addressRowInner";
-
-      row.appendChild(input);
-
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "btn";
-      btn.textContent = "ADRESES VALIDĀCIJA";
-      btn.addEventListener("click", validateAddress);
-      row.appendChild(btn);
-
-      wrap.appendChild(row);
-    } else {
-      wrap.appendChild(input);
-    }
-
+    wrap.appendChild(input);
     root.appendChild(wrap);
   }
+}
+
+
+
+function buildAddressTop(root, obj){
+  root.innerHTML = "";
+
+  const f = schema.find(x => x.key === "ADRESE_LOKACIJA");
+  if (!f) return;
+
+  const wrap = document.createElement("div");
+  wrap.className = "field";
+  wrap.dataset.key = f.key;
+
+  const label = document.createElement("label");
+  label.textContent = f.label;
+  label.htmlFor = f.key;
+
+  const input = document.createElement("input");
+  input.id = f.key;
+  input.name = f.key;
+  input.type = "text";
+  input.value = obj && obj[f.key] ? obj[f.key] : "";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+
+  input.addEventListener("input", () => {
+    working[f.key] = input.value;
+
+    // If user edits the address manually, it is no longer "system-validated"
+    if (workingIsNew){
+      working.__addrSystem = false;
+    } else {
+      addrSystemIds.delete(working.id);
+      saveAddrSystemIds();
+    }
+    applySystemAddressStyle();
+
+    markDirty(f.key);
+    updateCtxTitle();
+    updateMiniMapDebounced();
+  });
+
+  wrap.appendChild(label);
+  wrap.appendChild(input);
+  root.appendChild(wrap);
 }
 
 function applySystemAddressStyle(){
