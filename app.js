@@ -1,4 +1,4 @@
-const APP_VERSION = "v1.1.2";
+const APP_VERSION = "v1.1.3";
 const APP_DATE = "2026-01-04";
 
 // Storage
@@ -256,6 +256,16 @@ function buildForm(root, obj){
     input.addEventListener("input", () => {
       if (!working) return;
       working[f.key] = input.value;
+      if (f.key === "ADRESE_LOKACIJA"){
+        // If user edits the address manually, it is no longer "system-validated"
+        if (workingIsNew){
+          working.__addrSystem = false;
+        } else {
+          addrSystemIds.delete(working.id);
+          saveAddrSystemIds();
+        }
+        applySystemAddressStyle();
+      }
       markDirty(f.key);
       updateCtxTitle();
       updateMiniMapDebounced();
@@ -273,11 +283,10 @@ function applySystemAddressStyle(){
   const isSystem = (!workingIsNew && addrSystemIds.has(working.id)) || (workingIsNew && working.__addrSystem === true);
   wrap.classList.toggle("system", !!isSystem);
 
-  // B: when system-validated, address becomes read-only (only re-validate can change it)
+  // Address remains editable (user can correct). If user edits manually, we drop "system" marker.
   const inp = document.getElementById("ADRESE_LOKACIJA");
   if (inp){
-    inp.disabled = !!isSystem;
-    wrap.classList.toggle("readonly", !!isSystem);
+    inp.disabled = false;
   }
 }
 
@@ -365,6 +374,7 @@ async function validateAddress(){
 
     // reflect to inputs
     $("ADRESE_LOKACIJA").value = working.ADRESE_LOKACIJA;
+    try{ $("ADRESE_LOKACIJA").disabled = false; } catch {}
     $("LAT").value = working.LAT;
     $("LNG").value = working.LNG;
 

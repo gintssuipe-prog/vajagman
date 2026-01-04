@@ -307,9 +307,14 @@ body{
 #miniMap .leaflet-bottom,
 #miniMap .leaflet-control { z-index: 0 !important; }
 
-/* Read-only system address (B: cannot edit; only re-validate) */
-.field.readonly input{
-  background: #cfe3ff;
-  cursor: not-allowed;
-  opacity: 0.95;
+
+
+/* Address + validation horizontal layout */
+.address-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.address-row input {
+  flex: 1;
 }
