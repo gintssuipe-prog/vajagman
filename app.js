@@ -1,18 +1,16 @@
-const APP_VERSION = "v1.1.7";
+
+const APP_VERSION = "v1.1.9";
 const APP_DATE = "2026-01-04";
 
-// Storage
-const STORAGE_KEY_OBJECTS = "vajagman_objects_v2";
-const STORAGE_KEY_CURRENT = "vajagman_current_id_v2";
-const STORAGE_KEY_AUTOMODE = "vajagman_auto_open_enabled_v2";
-const STORAGE_KEY_AUTORADIUS = "vajagman_auto_open_radius_v2";
-const STORAGE_KEY_ADDR_SYSTEM = "vajagman_addr_system_ids_v2"; // set of ids where address is system-validated
-
+const STORAGE_KEY_OBJECTS = "vajagman_objects_v3";
+const STORAGE_KEY_CURRENT = "vajagman_current_id_v3";
+const STORAGE_KEY_AUTOMODE = "vajagman_auto_open_enabled_v3";
+const STORAGE_KEY_AUTORADIUS = "vajagman_auto_open_radius_v3";
+const STORAGE_KEY_ADDR_SYSTEM = "vajagman_addr_system_ids_v3";
 const AUTO_COOLDOWN_MS = 15000;
 
-// Schema (fields)
+// Fields: address is handled separately (rendered above mini map), but still stored in object.
 const schema = [
-  { key: "ADRESE_LOKACIJA", label: "ADRESE/LOKĀCIJA", type: "text" },
   { key: "ADRESES_LOKACIJAS_PIEZIMES", label: "ADRESES/LOKĀCIJAS PIEZĪMES", type: "textarea" },
   { key: "DURVJU_KODS_PIEKLUVE", label: "DURVJU KODS/PIEKĻUVE", type: "textarea" },
   { key: "PIEKLUVES_KONTAKTI", label: "PIEKĻUVES KONTAKTI", type: "text" },
@@ -32,6 +30,15 @@ const schema = [
 function $(id){ return document.getElementById(id); }
 function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
 
+function loadJson(key, fallback){
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return fallback;
+}
+function saveJson(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+
 function setStatus(msg, dirty=false){
   const el = $("status");
   el.textContent = msg;
@@ -39,310 +46,190 @@ function setStatus(msg, dirty=false){
 }
 function setMapStatus(msg){ $("mapStatus").textContent = msg; }
 
-// ---------- Data model rules (discipline) ----------
-// - Only SAVED objects exist in catalog.
-// - New record exists only in memory until Save.
-// - If you leave Record tab without saving (dirty), changes are discarded (your choice: B discipline).
+let objects = [];
+let currentId = null;
+let working = null;          // working copy (may be new)
+let workingIsNew = false;
+let dirtyFields = new Set(); // keys changed (incl. ADRESE_LOKACIJA)
+let addrSystemIds = new Set();
 
-let objects = [];           // saved objects
-let currentId = null;       // selected saved object id
-let working = null;         // working copy for record tab
-let workingIsNew = false;   // true if new record not yet saved
-let dirtyFields = new Set();// keys
-let addrSystemIds = new Set(); // ids where address was system-validated (ALL CAPS semantics)
-
-function loadJson(key, fallback){
-  try{
-    const raw = localStorage.getItem(key);
-    if (raw) return JSON.parse(raw);
-  }catch{}
-  return fallback;
-}
-function saveJson(key, value){
-  localStorage.setItem(key, JSON.stringify(value));
-}
-
-function loadObjects(){
-  const list = loadJson(STORAGE_KEY_OBJECTS, []);
-  // if empty, keep empty (no demo auto-insert; discipline)
-  return Array.isArray(list) ? list : [];
-}
+function loadObjects(){ return Array.isArray(loadJson(STORAGE_KEY_OBJECTS, [])) ? loadJson(STORAGE_KEY_OBJECTS, []) : []; }
 function saveObjects(){ saveJson(STORAGE_KEY_OBJECTS, objects); }
-
+function saveCurrentId(id){ if (id) localStorage.setItem(STORAGE_KEY_CURRENT, id); }
 function loadCurrentId(){
   const id = localStorage.getItem(STORAGE_KEY_CURRENT);
   if (id && objects.some(o => o.id === id)) return id;
   return objects[0]?.id ?? null;
 }
-function saveCurrentId(id){ if (id) localStorage.setItem(STORAGE_KEY_CURRENT, id); }
-
 function loadAddrSystemIds(){
   const arr = loadJson(STORAGE_KEY_ADDR_SYSTEM, []);
   return new Set(Array.isArray(arr) ? arr : []);
 }
-function saveAddrSystemIds(){
-  saveJson(STORAGE_KEY_ADDR_SYSTEM, Array.from(addrSystemIds));
-}
+function saveAddrSystemIds(){ saveJson(STORAGE_KEY_ADDR_SYSTEM, Array.from(addrSystemIds)); }
 
 function getSavedById(id){ return objects.find(o => o.id === id) || null; }
 
-function displayTitleFor(o){
-  const nr = (o?.OBJEKTA_NR || "").trim();
-  const adr = (o?.ADRESE_LOKACIJA || "").trim();
-  const title = (nr ? `#${nr} ` : "") + (adr || "—");
-  return title || "—";
+function parseLatLng(o){
+  const lat = Number(String(o.LAT || "").replace(",", "."));
+  const lng = Number(String(o.LNG || "").replace(",", "."));
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
 }
 
-// ---------- Tabs / navigation ----------
-let activeTab = "record";
-function switchTab(name){
-  // leaving record with dirty => discard changes (no blocking)
-  if (activeTab === "record" && name !== "record"){
-    discardUnsavedChangesIfNeeded();
-  }
+function titleFromRecord(o){
+  const adr = String(o?.ADRESE_LOKACIJA || "").trim();
+  const code = String(o?.DURVJU_KODS_PIEKLUVE || "").trim();
+  const oneLineCode = code.split(/\r?\n/)[0].trim();
+  const t = (adr + " " + oneLineCode).trim();
+  return t || "—";
+}
 
-  activeTab = name;
-  for (const el of document.querySelectorAll(".panel")) el.classList.add("hidden");
-  $("tab-" + name).classList.remove("hidden");
-  for (const b of document.querySelectorAll(".tab")){
-    b.classList.toggle("active", b.dataset.tab === name);
+// IMPORTANT: record title in header is based on SAVED record only.
+// - New (unsaved) => "—"
+// - Existing => derive from saved snapshot
+function updateCtxTitle(){
+  if (workingIsNew || !currentId){
+    $("ctxTitle").textContent = "—";
+    return;
   }
+  const saved = getSavedById(currentId);
+  $("ctxTitle").textContent = titleFromRecord(saved).toUpperCase();
+}
 
-  renderHeaderActions();
+function applySystemAddressStyle(){ 
+  const wrap = document.querySelector('.field.addressStandalone');
+  if (!wrap) return;
+  const isSystem = (!workingIsNew && currentId && addrSystemIds.has(currentId)) || (workingIsNew && working && working.__addrSystem === true);
+  wrap.classList.toggle("system", !!isSystem);
+}
 
-  if (name === "map"){
-    ensureMap();
-    setTimeout(() => map.invalidateSize(), 50);
-    refreshMarkers();
-    maybeStartAutoWatch();
-  } else {
-    stopAutoWatch();
-  }
-
-  if (name === "catalog"){
-    refreshCatalog();
-  }
+// Save button state machine:
+// - disabled if no changes (dirtyFields empty)
+// - for NEW: also disabled if all fields empty (avoid empty record)
+function hasMeaningfulData(obj){
+  if (!obj) return false;
+  const keys = ["ADRESE_LOKACIJA","ADRESES_LOKACIJAS_PIEZIMES","DURVJU_KODS_PIEKLUVE","PIEKLUVES_KONTAKTI","PANELIS_MARKA","PAROLE1","PAROLE2","PAROLE3","REMOTEPAROLE","OBJEKTA_NR","PIEZIMES1","PIEZIMES2","KONFIGURACIJA","LAT","LNG"];
+  return keys.some(k => String(obj[k] || "").trim().length > 0);
 }
 
 function renderHeaderActions(){
   const root = $("hdrActions");
   root.innerHTML = "";
 
-  if (activeTab === "record"){
-    const btnSave = document.createElement("button");
-    btnSave.className = "btn primary";
-    btnSave.textContent = "SAGLABĀT";
-    btnSave.onclick = saveWorking;
-    root.appendChild(btnSave);
+  const btnSave = document.createElement("button");
+  btnSave.id = "btnSave";
+  btnSave.className = "btn";
+  btnSave.textContent = "SAGLABĀT";
+  btnSave.onclick = saveWorking;
 
-    const btnNew = document.createElement("button");
-    btnNew.className = "btn";
-    btnNew.textContent = "JAUNS";
-    btnNew.onclick = createNewRecord;
-    root.appendChild(btnNew);
-  } else {
-    // no global actions for map/catalog (per spec)
-  }
+  const btnNew = document.createElement("button");
+  btnNew.id = "btnNew";
+  btnNew.className = "btn success";
+  btnNew.textContent = "JAUNS";
+  btnNew.onclick = createNewRecord;
+
+  root.appendChild(btnSave);
+  root.appendChild(btnNew);
+
+  refreshSaveButton();
 }
 
-// ---------- Working copy handling ----------
+function refreshSaveButton(){
+  const btn = $("btnSave");
+  if (!btn) return;
+  const isDirty = dirtyFields.size > 0;
+  const canSave = isDirty && (!workingIsNew || hasMeaningfulData(working));
+  btn.disabled = !canSave;
+  btn.classList.toggle("primary", canSave);
+  // When not dirty: show "Saglabāts." if existing record; for new empty show "Nav ierakstu..." handled elsewhere
+  if (!isDirty && !workingIsNew && currentId) setStatus("Saglabāts.", false);
+  if (isDirty) setStatus("Nesaglabātas izmaiņas — nospied SAGLABĀT.", true);
+}
+
+function markDirty(key){
+  dirtyFields.add(key);
+  // mark field wrapper dirty
+  const wrap = document.querySelector(`.field[data-key="${CSS.escape(key)}"]`);
+  if (wrap) wrap.classList.add("dirty");
+  refreshSaveButton();
+}
+
+function clearDirtyUI(){
+  document.querySelectorAll(".field.dirty").forEach(el => el.classList.remove("dirty"));
+  dirtyFields.clear();
+  refreshSaveButton();
+}
+
 function blankObject(){
-  const o = { id: uid() };
+  const o = { id: uid(), ADRESE_LOKACIJA: "" };
   for (const f of schema) o[f.key] = "";
   return o;
-}
-
-function loadWorkingFromSaved(id){
-  const saved = getSavedById(id);
-  if (!saved) return null;
-  return structuredClone(saved);
 }
 
 function setWorking(o, isNew){
   working = o;
   workingIsNew = !!isNew;
   dirtyFields.clear();
-  updateCtxTitle();
-  buildAddressTop($("addressTop"), working);
+
+  // address input
+  $("ADRESE_LOKACIJA").value = String(working.ADRESE_LOKACIJA || "");
+  // clear dirty state on address field wrapper
+  document.querySelector('.field.addressStandalone')?.classList.remove("dirty");
+
   buildForm($("formRoot"), working);
-
-  // Mini map header actions: Address validation lives in the map block
-  const mh = $("miniHdrActions");
-  if (mh){
-    mh.innerHTML = "";
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn";
-    btn.textContent = "ADRESES VALIDĀCIJA";
-    btn.addEventListener("click", validateAddress);
-    mh.appendChild(btn);
-  }
   applySystemAddressStyle();
-  setStatus(workingIsNew ? "Jauns ieraksts (nav saglabāts)." : "Gatavs.");
+  updateCtxTitle();
+
+  if (workingIsNew) setStatus("Jauns ieraksts (nav saglabāts).");
+  else setStatus("Saglabāts.");
+  refreshSaveButton();
   updateMiniMap();
-}
-
-function updateCtxTitle(){
-  $("ctxTitle").textContent = displayTitleFor(working);
-}
-
-function markDirty(key){
-  dirtyFields.add(key);
-  // status dirty
-  setStatus("Ir nesaglabāti dati — nospied SAGLABĀT.", true);
-  // mark field wrapper
-  const wrap = document.querySelector(`.field[data-key="${CSS.escape(key)}"]`);
-  if (wrap) wrap.classList.add("dirty");
-}
-
-function clearDirtyUI(){
-  for (const el of document.querySelectorAll(".field.dirty")) el.classList.remove("dirty");
-  setStatus("Saglabāts.");
 }
 
 function discardUnsavedChangesIfNeeded(){
   if (dirtyFields.size === 0) return;
 
   if (workingIsNew){
-    // discard the new record entirely
+    // discard completely (discipline)
     working = null;
     workingIsNew = false;
     dirtyFields.clear();
     setStatus("Nesaglabāts JAUNS ieraksts atmests.", false);
 
-    // return to some existing record if any
     if (objects.length){
       currentId = currentId || objects[0].id;
-      setWorking(loadWorkingFromSaved(currentId), false);
+      setWorking(structuredClone(getSavedById(currentId)), false);
     } else {
-      // no records
-      setWorking(blankObject(), true);
-      // but immediately mark as new & empty? We'll keep as new, but not dirty until user types.
+      createNewRecord();
+      // but don't mark dirty
       dirtyFields.clear();
-      setStatus("Nav ierakstu. Izveido jaunu un saglabā.");
+      refreshSaveButton();
+      setStatus("Nav ierakstu. Izveido jaunu un SAGLABĀT.");
     }
     return;
   }
 
-  // existing record: revert to saved snapshot
+  // existing record: revert
   const saved = getSavedById(currentId);
-  working = structuredClone(saved);
-  dirtyFields.clear();
-  buildForm($("formRoot"), working);
-  applySystemAddressStyle();
-  updateCtxTitle();
-  setStatus("Nesaglabātas izmaiņas atmestas.", false);
-  updateMiniMap();
-}
-
-// ---------- Form ----------
-function buildForm(root, obj){
-  root.innerHTML = "";
-  for (const f of schema){
-    if (f.key === "ADRESE_LOKACIJA") continue;
-
-    const wrap = document.createElement("div");
-    wrap.className = "field";
-    wrap.dataset.key = f.key;
-
-    const label = document.createElement("label");
-    label.textContent = f.label;
-    label.htmlFor = f.key;
-
-    let input;
-    if (f.type === "textarea"){
-      input = document.createElement("textarea");
-    } else {
-      input = document.createElement("input");
-      input.type = "text";
-      input.autocapitalize = "sentences";
-    }
-
-    input.id = f.key;
-    input.name = f.key;
-    input.value = obj?.[f.key] ?? "";
-
-    input.addEventListener("input", () => {
-      if (!working) return;
-      working[f.key] = input.value;
-
-      markDirty(f.key);
-      updateCtxTitle();
-      updateMiniMapDebounced();
-    });
-
-    wrap.appendChild(label);
-    wrap.appendChild(input);
-    root.appendChild(wrap);
+  if (saved){
+    setWorking(structuredClone(saved), false);
+    setStatus("Nesaglabātas izmaiņas atmestas.", false);
   }
 }
 
-
-
-function buildAddressTop(root, obj){
-  root.innerHTML = "";
-
-  const f = schema.find(x => x.key === "ADRESE_LOKACIJA");
-  if (!f) return;
-
-  const wrap = document.createElement("div");
-  wrap.className = "field";
-  wrap.dataset.key = f.key;
-
-  const label = document.createElement("label");
-  label.textContent = f.label;
-  label.htmlFor = f.key;
-
-  const input = document.createElement("input");
-  input.id = f.key;
-  input.name = f.key;
-  input.type = "text";
-  input.value = obj && obj[f.key] ? obj[f.key] : "";
-  input.autocomplete = "off";
-  input.spellcheck = false;
-
-  input.addEventListener("input", () => {
-    working[f.key] = input.value;
-
-    // If user edits the address manually, it is no longer "system-validated"
-    if (workingIsNew){
-      working.__addrSystem = false;
-    } else {
-      addrSystemIds.delete(working.id);
-      saveAddrSystemIds();
-    }
-    applySystemAddressStyle();
-
-    markDirty(f.key);
-    updateCtxTitle();
-    updateMiniMapDebounced();
-  });
-
-  wrap.appendChild(label);
-  wrap.appendChild(input);
-  root.appendChild(wrap);
-}
-
-function applySystemAddressStyle(){
-  const wrap = document.querySelector(`.field[data-key="ADRESE_LOKACIJA"]`);
-  if (!wrap) return;
-  const isSystem = (!workingIsNew && addrSystemIds.has(working.id)) || (workingIsNew && working.__addrSystem === true);
-  wrap.classList.toggle("system", !!isSystem);
-
-  // Address remains editable (user can correct). If user edits manually, we drop "system" marker.
-  const inp = document.getElementById("ADRESE_LOKACIJA");
-  if (inp){
-    inp.disabled = false;
-  }
-}
-
-// ---------- Save / New ----------
 function saveWorking(){
   if (!working) return;
 
-  // if new, add to objects list
+  // no-op if should not save
+  if (dirtyFields.size === 0) return;
+  if (workingIsNew && !hasMeaningfulData(working)) return;
+
+  // system address marker persists only if still flagged
+  if (working.__addrSystem === true) {
+    // keep for save below
+  }
+
   if (workingIsNew){
-    // remove private marker
     delete working.__addrSystem;
     objects.unshift(structuredClone(working));
     saveObjects();
@@ -357,87 +244,84 @@ function saveWorking(){
     }
   }
 
-  // apply address system tracking if needed
-  if (addrSystemIds.has(working.id) || working.__addrSystem === true){
-    addrSystemIds.add(working.id);
+  // address system tracking
+  if (!workingIsNew && currentId){
+    if (working.__addrSystem === true) addrSystemIds.add(currentId);
     saveAddrSystemIds();
   }
 
-  dirtyFields.clear();
   clearDirtyUI();
-  applySystemAddressStyle();
+  updateCtxTitle(); // title appears/updates ONLY after save
   refreshCatalog();
   refreshMarkers();
   updateMiniMap();
+  setStatus("Saglabāts.", false);
 }
 
 function createNewRecord(){
-  // Starting state A: blank, not in catalog until Save
-  currentId = currentId; // keep reference to return if needed
   const o = blankObject();
   o.__addrSystem = false;
+  currentId = null; // not in catalog until save
   setWorking(o, true);
-  // do not mark dirty until user edits
   dirtyFields.clear();
+  updateCtxTitle(); // shows —
+  refreshSaveButton();
   setStatus("Jauns ieraksts (nav saglabāts). Aizpildi un nospied SAGLABĀT.");
 }
 
-// ---------- Address validation (A: overwrite address ALL CAPS) ----------
-async function validateAddress(){
-  if (!working) return;
-  const address = (working.ADRESE_LOKACIJA || "").trim();
-  if (!address){
-    setStatus("Nav adreses, ko validēt.", true);
-    return;
-  }
+function buildForm(root, obj){
+  root.innerHTML = "";
+  for (const f of schema){
+    const wrap = document.createElement("div");
+    wrap.className = "field";
+    wrap.dataset.key = f.key;
 
-  try{
-    setStatus("Validēju adresi un meklēju koordinātes…", false);
-    const geo = await geocodeAddress(address);
-    if (!geo){
-      setStatus("Validācija: koordinātes neatradu (precizē adresi).", true);
-      return;
-    }
-    working.LAT = String(geo.lat);
-    working.LNG = String(geo.lng);
+    const label = document.createElement("label");
+    label.textContent = f.label;
+    label.htmlFor = f.key;
 
-    // Get grammatically correct address name from coordinates (reverse geocoding)
-    let pretty = "";
-    try{
-      pretty = await reverseGeocode(geo.lat, geo.lng);
-    } catch {}
-    const finalAddr = (pretty || address).trim();
-    // overwrite address ALL CAPS (system semantics)
-    working.ADRESE_LOKACIJA = finalAddr.toUpperCase();
+    let input;
+    if (f.type === "textarea") input = document.createElement("textarea");
+    else { input = document.createElement("input"); input.type = "text"; }
 
-    // mark system
-    if (workingIsNew){
-      working.__addrSystem = true;
-    } else {
-      addrSystemIds.add(working.id);
-      saveAddrSystemIds();
-    }
+    input.id = f.key;
+    input.value = obj?.[f.key] ?? "";
 
-    // reflect to inputs
-    $("ADRESE_LOKACIJA").value = working.ADRESE_LOKACIJA;
-    try{ $("ADRESE_LOKACIJA").disabled = false; } catch {}
-    $("LAT").value = working.LAT;
-    $("LNG").value = working.LNG;
+    input.addEventListener("input", () => {
+      if (!working) return;
+      working[f.key] = input.value;
+      markDirty(f.key);
+      // NOTE: header title does NOT live-update; it updates after save (discipline)
+    });
 
-    markDirty("ADRESE_LOKACIJA");
-    markDirty("LAT");
-    markDirty("LNG");
-    applySystemAddressStyle();
-    updateCtxTitle();
-    refreshMarkers();
-    updateMiniMap();
-    setStatus("Adreses validācija pabeigta (ALL CAPS) + koordinātes ieliktas. Nospied SAGLABĀT.", true);
-  } catch {
-    setStatus("Adreses validācija neizdevās (internets / serviss).", true);
+    wrap.appendChild(label);
+    wrap.appendChild(input);
+    root.appendChild(wrap);
   }
 }
 
-// ---------- Geocoding (Nominatim) ----------
+// Address input (special)
+function wireAddressInput(){
+  const inp = $("ADRESE_LOKACIJA");
+  inp.addEventListener("input", () => {
+    if (!working) return;
+    working.ADRESE_LOKACIJA = inp.value;
+    // if user edits manually, drop system marker
+    if (workingIsNew){
+      working.__addrSystem = false;
+    } else if (currentId) {
+      addrSystemIds.delete(currentId);
+      saveAddrSystemIds();
+    }
+    applySystemAddressStyle();
+
+    // mark dirty UI on wrapper
+    document.querySelector('.field.addressStandalone')?.classList.add("dirty");
+    markDirty("ADRESE_LOKACIJA");
+  });
+}
+
+// Geocoding (Nominatim)
 async function geocodeAddress(address){
   const q = encodeURIComponent(address || "");
   const url = `https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=1`;
@@ -447,7 +331,6 @@ async function geocodeAddress(address){
   if (!arr?.length) return null;
   return { lat: Number(arr[0].lat), lng: Number(arr[0].lon) };
 }
-
 
 async function reverseGeocode(lat, lng){
   const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&zoom=18&addressdetails=1`;
@@ -467,14 +350,55 @@ async function reverseGeocode(lat, lng){
   return out;
 }
 
-// ---------- Google Maps deep link ----------
-function openInGoogleMaps(address){
-  const q = encodeURIComponent(address || "");
-  const url = `https://www.google.com/maps/search/?api=1&query=${q}`;
-  window.open(url, "_blank", "noopener");
+// Address validation (writes pretty address ALL CAPS + LAT/LNG)
+async function validateAddress(){
+  if (!working) return;
+  const address = String(working.ADRESE_LOKACIJA || "").trim();
+  if (!address){
+    setStatus("Nav adreses, ko validēt.", true);
+    return;
+  }
+  try {
+    setStatus("Validēju adresi un meklēju koordinātes…", false);
+    const geo = await geocodeAddress(address);
+    if (!geo){
+      setStatus("Validācija: koordinātes neatradu (precizē adresi).", true);
+      return;
+    }
+    working.LAT = String(geo.lat);
+    working.LNG = String(geo.lng);
+
+    let pretty = "";
+    try { pretty = await reverseGeocode(geo.lat, geo.lng); } catch {}
+    const finalAddr = (pretty || address).trim();
+    working.ADRESE_LOKACIJA = finalAddr.toUpperCase();
+    $("ADRESE_LOKACIJA").value = working.ADRESE_LOKACIJA;
+
+    // mark system
+    if (workingIsNew) working.__addrSystem = true;
+    else if (currentId) { addrSystemIds.add(currentId); saveAddrSystemIds(); }
+
+    applySystemAddressStyle();
+
+    // reflect coords fields if visible
+    $("LAT").value = working.LAT;
+    $("LNG").value = working.LNG;
+
+    markDirty("LAT");
+    markDirty("LNG");
+    // Address is changed by system: still dirty until user saves
+    document.querySelector('.field.addressStandalone')?.classList.add("dirty");
+    markDirty("ADRESE_LOKACIJA");
+
+    refreshMarkers();
+    updateMiniMap();
+    setStatus("Adreses validācija pabeigta + koordinātes ieliktas. Nospied SAGLABĀT.", true);
+  } catch {
+    setStatus("Adreses validācija neizdevās (internets / serviss).", true);
+  }
 }
 
-// ---------- Distance / GPS ----------
+// Distance / GPS
 function haversineMeters(lat1, lon1, lat2, lon2){
   const R = 6371000;
   const toRad = (x) => (x * Math.PI) / 180;
@@ -498,13 +422,6 @@ function getCoords(){
   });
 }
 
-function parseLatLng(o){
-  const lat = Number(String(o.LAT || "").replace(",", "."));
-  const lng = Number(String(o.LNG || "").replace(",", "."));
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  return { lat, lng };
-}
-
 function findNearestTo(lat, lng){
   let best = null;
   for (const o of objects){
@@ -516,69 +433,33 @@ function findNearestTo(lat, lng){
   return best;
 }
 
-// ---------- Mini map (always visible in record) ----------
+// Mini map
 let miniMap = null;
 let miniMarker = null;
-let miniTile = null;
-
 function ensureMiniMap(){
   if (miniMap) return;
   miniMap = L.map("miniMap", { zoomControl: false, attributionControl:false, dragging:true, scrollWheelZoom:false, doubleClickZoom:false });
   miniMap.setView([56.9496, 24.1052], 12);
-  miniTile = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 });
-  miniTile.addTo(miniMap);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(miniMap);
 }
 
 function updateMiniMap(){
   ensureMiniMap();
   setTimeout(() => miniMap.invalidateSize(), 50);
 
-  if (!working){
-    miniMap.setView([56.9496, 24.1052], 12);
-    if (miniMarker){ miniMap.removeLayer(miniMarker); miniMarker = null; }
-    return;
-  }
-
+  if (!working) return;
   const c = parseLatLng(working);
   if (!c){
+    if (miniMarker) { miniMap.removeLayer(miniMarker); miniMarker = null; }
     miniMap.setView([56.9496, 24.1052], 12);
-    if (miniMarker){ miniMap.removeLayer(miniMarker); miniMarker = null; }
     return;
   }
-
-  if (!miniMarker){
-    miniMarker = L.marker([c.lat, c.lng]).addTo(miniMap);
-  } else {
-    miniMarker.setLatLng([c.lat, c.lng]);
-  }
+  if (!miniMarker) miniMarker = L.marker([c.lat, c.lng]).addTo(miniMap);
+  else miniMarker.setLatLng([c.lat, c.lng]);
   miniMap.setView([c.lat, c.lng], 16);
 }
 
-let miniMapDebounce = null;
-function updateMiniMapDebounced(){
-  clearTimeout(miniMapDebounce);
-  miniMapDebounce = setTimeout(updateMiniMap, 200);
-}
-
-// Buttons
-async function showOnMap(){
-  switchTab("map");
-  ensureMap();
-  refreshMarkers();
-
-  // if current is new (not saved), we can still focus its coords if any
-  const target = workingIsNew ? working : getSavedById(currentId);
-  if (!target) return;
-  const c = parseLatLng(target);
-  if (!c){
-    setMapStatus("Nav LAT/LNG. Izmanto ADRESES VALIDĀCIJA vai ieliec koordinātes manuāli.");
-    return;
-  }
-  map.setView([c.lat, c.lng], 17);
-}
-
-
-// ---------- Main map ----------
+// Main map tab
 let map = null;
 let markersLayer = null;
 let meMarker = null;
@@ -587,43 +468,28 @@ function ensureMap(){
   if (map) return;
   map = L.map("map", { zoomControl: true });
   map.setView([56.9496, 24.1052], 12);
-
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap"
-  }).addTo(map);
-
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(map);
   markersLayer = L.layerGroup().addTo(map);
 
-  // Long-press/right click: set LAT/LNG to WORKING record (even if new)
+  // long-press/right click to set coords to working record
   map.on("contextmenu", (e) => {
     if (!working) return;
-    const lat = e.latlng.lat;
-    const lng = e.latlng.lng;
-
-    working.LAT = String(lat);
-    working.LNG = String(lng);
-
+    working.LAT = String(e.latlng.lat);
+    working.LNG = String(e.latlng.lng);
     $("LAT").value = working.LAT;
     $("LNG").value = working.LNG;
-
     markDirty("LAT");
     markDirty("LNG");
-
     refreshMarkers();
     updateMiniMap();
-    setMapStatus(`Ielikts LAT/LNG: ${lat.toFixed(6)}, ${lng.toFixed(6)}. Nospied SAGLABĀT.`);
+    setMapStatus(`Ielikts LAT/LNG: ${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}. Nospied SAGLABĀT.`);
   });
 }
 
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
-  }[c]));
-}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c])); }
 
 function objectPopupHtml(o){
-  const title = displayTitleFor(o).toUpperCase();
+  const title = titleFromRecord(o).toUpperCase();
   const lines = [
     `<div style="font-weight:900;margin-bottom:6px;">${escapeHtml(title)}</div>`,
     o.ADRESES_LOKACIJAS_PIEZIMES ? `<div><b>Piezīmes:</b> ${escapeHtml(o.ADRESES_LOKACIJAS_PIEZIMES)}</div>` : "",
@@ -631,7 +497,6 @@ function objectPopupHtml(o){
     o.PIEKLUVES_KONTAKTI ? `<div><b>Kontakti:</b> ${escapeHtml(o.PIEKLUVES_KONTAKTI)}</div>` : "",
     `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">` +
       `<button data-open="${o.id}" style="padding:6px 10px;border-radius:10px;border:1px solid #1f2a44;background:#1e293b;color:#e2e8f0;font-weight:800;">Atvērt</button>` +
-      `<button data-nav="${o.id}" style="padding:6px 10px;border-radius:10px;border:1px solid transparent;background:#2563eb;color:#e2e8f0;font-weight:900;">Navigēt</button>` +
     `</div>`
   ].filter(Boolean);
   return `<div style="font-size:13px;line-height:1.25">${lines.join("")}</div>`;
@@ -640,54 +505,36 @@ function objectPopupHtml(o){
 function refreshMarkers(){
   if (!map || !markersLayer) return;
   markersLayer.clearLayers();
-
-  // show only saved objects on map markers (catalog concept). working new isn't in catalog.
   for (const o of objects){
     const c = parseLatLng(o);
     if (!c) continue;
-    const m = L.marker([c.lat, c.lng]);
+    const m = L.marker([c.lat, c.lng]).addTo(markersLayer);
     m.bindPopup(objectPopupHtml(o), { maxWidth: 320 });
-    m.addTo(markersLayer);
-
     m.on("popupopen", (e) => {
       const node = e.popup.getElement();
-      if (!node) return;
-
-      node.querySelectorAll("button[data-open]").forEach(btn => {
+      node?.querySelectorAll("button[data-open]").forEach(btn => {
         btn.onclick = () => openRecordById(btn.getAttribute("data-open"));
-      });
-      node.querySelectorAll("button[data-nav]").forEach(btn => {
-        btn.onclick = () => {
-          const obj = getSavedById(btn.getAttribute("data-nav"));
-          if (!obj) return;
-          openInGoogleMaps(obj.ADRESE_LOKACIJA || "");
-        };
       });
     });
   }
 }
 
 function openRecordById(id){
-  // if record tab dirty, changes were discarded by switchTab logic already when leaving
   const saved = getSavedById(id);
   if (!saved) return;
   currentId = id;
   saveCurrentId(currentId);
-  setWorking(loadWorkingFromSaved(id), false);
+  setWorking(structuredClone(saved), false);
   switchTab("record");
 }
 
-// ---------- Map helpers ----------
 async function centerOnMe(){
   setMapStatus("Nosaku lokāciju…");
   const me = await getCoords();
   ensureMap();
-  if (!meMarker){
-    meMarker = L.circleMarker([me.lat, me.lng], { radius: 8 });
-    meMarker.addTo(map);
-  } else {
-    meMarker.setLatLng([me.lat, me.lng]);
-  }
+  if (!meMarker) {
+    meMarker = L.circleMarker([me.lat, me.lng], { radius: 8 }).addTo(map);
+  } else meMarker.setLatLng([me.lat, me.lng]);
   map.setView([me.lat, me.lng], 16);
   setMapStatus(`Tu: ${me.lat.toFixed(5)}, ${me.lng.toFixed(5)} (±${Math.round(me.acc)}m)`);
   return me;
@@ -696,79 +543,77 @@ async function centerOnMe(){
 async function findNearestToMeAndFocus(){
   const me = await centerOnMe();
   const best = findNearestTo(me.lat, me.lng);
-  if (!best){
-    setMapStatus("Nav objektu ar koordinātēm (LAT/LNG).");
-    return;
-  }
+  if (!best) { setMapStatus("Nav objektu ar koordinātēm (LAT/LNG)."); return; }
   map.setView([best.c.lat, best.c.lng], 17);
   setMapStatus(`Tuvākais: ~${Math.round(best.d)}m.`);
 }
 
-// ---------- Auto-open nearest (1:C) ----------
+// Auto-open nearest (opens record automatically)
 let watchId = null;
 let lastAutoSwitchAt = 0;
-
 function isAutoEnabled(){ return localStorage.getItem(STORAGE_KEY_AUTOMODE) === "1"; }
 function setAutoEnabled(on){ localStorage.setItem(STORAGE_KEY_AUTOMODE, on ? "1" : "0"); }
-function getAutoRadius(){
-  const raw = localStorage.getItem(STORAGE_KEY_AUTORADIUS);
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 20 ? n : 80;
-}
+function getAutoRadius(){ const n = Number(localStorage.getItem(STORAGE_KEY_AUTORADIUS)); return Number.isFinite(n) && n>=20 ? n : 80; }
 function setAutoRadius(n){ localStorage.setItem(STORAGE_KEY_AUTORADIUS, String(n)); }
 
 function maybeStartAutoWatch(){
   if (!isAutoEnabled()) return;
   if (watchId !== null) return;
-  if (!navigator.geolocation){
-    setMapStatus("Auto: geolocation nav pieejams.");
-    return;
-  }
-
+  if (!navigator.geolocation) { setMapStatus("Auto: geolocation nav pieejams."); return; }
   watchId = navigator.geolocation.watchPosition((pos) => {
     const now = Date.now();
     if (now - lastAutoSwitchAt < AUTO_COOLDOWN_MS) return;
-
-    const me = { lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy };
-
+    const me = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     const best = findNearestTo(me.lat, me.lng);
     if (!best) return;
-
     const radius = getAutoRadius();
-    if (best.d > radius) {
-      if (activeTab === "map") setMapStatus(`Auto: tuvākais ${Math.round(best.d)}m (ārpus ${radius}m).`);
-      return;
-    }
+    if (best.d > radius) return;
 
     lastAutoSwitchAt = now;
 
-    // If we currently have dirty edits, we discard (discipline) before switching
-    if (activeTab === "record" && dirtyFields.size > 0){
-      discardUnsavedChangesIfNeeded();
-    }
+    // discard unsaved if needed (discipline)
+    if (activeTab === "record" && dirtyFields.size > 0) discardUnsavedChangesIfNeeded();
 
-    // Open record automatically (C)
     currentId = best.o.id;
     saveCurrentId(currentId);
-    setWorking(loadWorkingFromSaved(currentId), false);
+    setWorking(structuredClone(getSavedById(currentId)), false);
     switchTab("record");
     setStatus(`Auto: atvērts tuvākais (~${Math.round(best.d)}m).`);
   }, () => {
-    if (activeTab === "map") setMapStatus("Auto: lokācija nav pieejama (atļaujas / GPS).");
+    setMapStatus("Auto: lokācija nav pieejama (atļaujas / GPS).");
   }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 12000 });
 }
 
 function stopAutoWatch(){
   if (watchId === null) return;
-  try{ navigator.geolocation.clearWatch(watchId); } catch {}
+  try { navigator.geolocation.clearWatch(watchId); } catch {}
   watchId = null;
 }
 
-// ---------- Catalog ----------
+// Tabs
+let activeTab = "record";
+function switchTab(name){
+  if (activeTab === "record" && name !== "record") discardUnsavedChangesIfNeeded();
+
+  activeTab = name;
+  document.querySelectorAll(".panel").forEach(p => p.classList.add("hidden"));
+  $("tab-" + name).classList.remove("hidden");
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
+
+  if (name === "map") {
+    ensureMap();
+    setTimeout(() => map.invalidateSize(), 50);
+    refreshMarkers();
+    maybeStartAutoWatch();
+  } else {
+    stopAutoWatch();
+  }
+  if (name === "catalog") refreshCatalog();
+}
+
+// Catalog
 function refreshCatalog(){
   const root = $("listRoot");
-  if (!root) return;
-
   const q = ($("search").value || "").toLowerCase().trim();
   const list = objects.filter(o => {
     const t = `${o.OBJEKTA_NR||""} ${o.ADRESE_LOKACIJA||""}`.toLowerCase();
@@ -776,10 +621,10 @@ function refreshCatalog(){
   });
 
   root.innerHTML = "";
-  if (!list.length){
+  if (!list.length) {
     const empty = document.createElement("div");
     empty.className = "item";
-    empty.innerHTML = `<div class="itemTitle">Nav ierakstu</div><div class="itemMeta">Spied IERAKSTS → JAUNS, aizpildi un SAGLABĀT.</div>`;
+    empty.innerHTML = `<div class="itemTitle">Nav ierakstu</div><div class="itemMeta">IERAKSTS → JAUNS → SAGLABĀT.</div>`;
     root.appendChild(empty);
     return;
   }
@@ -787,7 +632,6 @@ function refreshCatalog(){
   for (const o of list){
     const el = document.createElement("div");
     el.className = "item";
-
     const top = document.createElement("div");
     top.className = "itemTop";
 
@@ -797,7 +641,7 @@ function refreshCatalog(){
 
     const title = document.createElement("div");
     title.className = "itemTitle";
-    title.textContent = displayTitleFor(o).toUpperCase();
+    title.textContent = titleFromRecord(o).toUpperCase();
 
     const meta = document.createElement("div");
     meta.className = "itemMeta";
@@ -826,7 +670,7 @@ function refreshCatalog(){
       ensureMap();
       refreshMarkers();
       const c = parseLatLng(o);
-      if (c){ map.setView([c.lat, c.lng], 17); }
+      if (c) map.setView([c.lat, c.lng], 17);
     };
 
     const btnDel = document.createElement("button");
@@ -838,21 +682,11 @@ function refreshCatalog(){
       saveObjects();
       addrSystemIds.delete(o.id);
       saveAddrSystemIds();
-
-      if (currentId === o.id){
-        currentId = objects[0]?.id ?? null;
-        if (currentId){
-          setWorking(loadWorkingFromSaved(currentId), false);
-        } else {
-          setWorking(blankObject(), true);
-          dirtyFields.clear();
-          setStatus("Nav ierakstu. Izveido jaunu un saglabā.");
-        }
-        saveCurrentId(currentId || "");
-      }
-
+      if (currentId === o.id) currentId = objects[0]?.id ?? null;
       refreshCatalog();
       refreshMarkers();
+      if (currentId) setWorking(structuredClone(getSavedById(currentId)), false);
+      else createNewRecord();
       setStatus("Dzēsts.");
     };
 
@@ -862,9 +696,7 @@ function refreshCatalog(){
     el.appendChild(top);
     el.appendChild(btns);
 
-    // tap anywhere (A) => open record
     el.addEventListener("click", (ev) => {
-      // avoid double on button
       if (ev.target && ev.target.closest("button")) return;
       openRecordById(o.id);
     });
@@ -873,7 +705,6 @@ function refreshCatalog(){
   }
 }
 
-// ---------- Export ----------
 function exportJson(){
   const box = $("exportBox");
   box.value = JSON.stringify(objects, null, 2);
@@ -881,64 +712,59 @@ function exportJson(){
   setStatus("JSON eksports sagatavots (nokopē un saglabā).");
 }
 
-// ---------- PWA ----------
+// PWA
 async function registerSW(){
   if (!("serviceWorker" in navigator)) return;
-  try{ await navigator.serviceWorker.register("./service-worker.js"); } catch {}
+  try { await navigator.serviceWorker.register("./service-worker.js"); } catch {}
 }
 
-// ---------- Init ----------
 document.addEventListener("DOMContentLoaded", () => {
   objects = loadObjects();
   addrSystemIds = loadAddrSystemIds();
   currentId = loadCurrentId();
 
-  // if no saved objects, start in new record state but not dirty until editing
-  if (currentId){
-    setWorking(loadWorkingFromSaved(currentId), false);
+  renderHeaderActions();
+
+  // Address wire-up
+  wireAddressInput();
+
+  if (currentId) {
+    setWorking(structuredClone(getSavedById(currentId)), false);
   } else {
-    setWorking(blankObject(), true);
+    createNewRecord();
     dirtyFields.clear();
+    refreshSaveButton();
     setStatus("Nav ierakstu. Izveido jaunu un SAGLABĀT.");
   }
 
-  // header actions for initial tab
-  renderHeaderActions();
+  // Tabs
+  document.querySelectorAll(".tab").forEach(btn => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
 
-  // tabs
-  document.querySelectorAll(".tab").forEach(btn => {
-    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
-  });
-
-  // map buttons
+  // Map tab buttons
   $("btnCenterMe").addEventListener("click", () => centerOnMe());
   $("btnFindNearest").addEventListener("click", () => findNearestToMeAndFocus());
 
-  // auto settings restore
+  // Validation button in map block (mini map header)
+  
+  // Auto settings
   $("autoOpenToggle").checked = isAutoEnabled();
   $("autoRadius").value = String(getAutoRadius());
   $("autoOpenToggle").addEventListener("change", () => {
     setAutoEnabled($("autoOpenToggle").checked);
-    if ($("autoOpenToggle").checked){
-      setMapStatus("Auto: ieslēgts.");
-      maybeStartAutoWatch();
-    } else {
-      setMapStatus("Auto: izslēgts.");
-      stopAutoWatch();
-    }
+    if ($("autoOpenToggle").checked) maybeStartAutoWatch();
+    else stopAutoWatch();
   });
   $("autoRadius").addEventListener("change", () => {
     const n = Number($("autoRadius").value);
     setAutoRadius(Number.isFinite(n) ? n : 80);
   });
 
-  // catalog
+  // Catalog
   $("search").addEventListener("input", refreshCatalog);
   $("btnExport").addEventListener("click", exportJson);
 
-  // initial mini map
+  // Mini map
   updateMiniMap();
 
-  // SW
   registerSW();
 });

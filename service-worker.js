@@ -1,4 +1,4 @@
-const CACHE_NAME = "vajagman-v1.1.7-2026-01-04";
+const CACHE_NAME = "vajagman-v1.1.9-2026-01-04";
 const ASSETS = [
   "./",
   "./index.html",
@@ -8,21 +8,15 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.map(k => (k !== CACHE_NAME ? caches.delete(k) : null)))
-    )
+    caches.keys().then(keys => Promise.all(keys.map(k => (k !== CACHE_NAME ? caches.delete(k) : null))))
   );
 });
 
 self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
-  );
+  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request)));
 });

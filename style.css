@@ -1,12 +1,12 @@
+
 :root{
   --bg:#070b14;
-  --panel:#0f172a;
-  --panel2:#0b1530;
   --text:#e2e8f0;
   --muted:#94a3b8;
-  --border:#1f2a44;
+  --border:rgba(255,255,255,0.10);
   --btn:#1e293b;
-  --btn2:#2563eb;
+  --btnBlue:#2563eb;
+  --btnGreen:#16a34a;
   --danger:#b91c1c;
   --field:#dbeafe;
   --fieldText:#0b1220;
@@ -21,10 +21,9 @@ body{
   background: var(--bg);
   color: var(--text);
 }
-
 .app{ max-width: 720px; margin:0 auto; }
 
-/* Sticky header = Freeze Panes */
+/* Sticky header */
 .hdr{
   position: sticky;
   top: 0;
@@ -37,26 +36,20 @@ body{
 
 .hdrTop{
   display:flex;
-  gap:12px;
   align-items:flex-start;
   justify-content:space-between;
+  gap:12px;
 }
+.brand .appName{ font-weight: 950; letter-spacing: .8px; font-size: 18px; }
+.brand .ver{ font-size: 12px; color: var(--muted); margin-top: 2px; }
 
-.brand .appName{
-  font-weight: 950;
-  letter-spacing: .8px;
-  font-size: 18px;
-}
-.brand .ver{
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 2px;
-}
+.hdrActions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 
-.ctx{
-  flex:1;
-  min-width: 0;
-  margin-top: 2px;
+.ctxRow{
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  margin-top: 6px;
 }
 .ctxLabel{
   font-size: 11px;
@@ -65,6 +58,8 @@ body{
   color: var(--muted);
 }
 .ctxTitle{
+  flex:1;
+  min-width: 0;
   font-size: 14px;
   font-weight: 950;
   letter-spacing: .6px;
@@ -74,18 +69,7 @@ body{
   text-transform: uppercase;
 }
 
-.hdrActions{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-  justify-content:flex-end;
-}
-
-.tabs{
-  display:flex;
-  gap:8px;
-  margin-top: 10px;
-}
+.tabs{ display:flex; gap:8px; margin-top: 10px; }
 .tab{
   flex:1;
   padding:10px 10px;
@@ -96,21 +80,12 @@ body{
   font-weight: 950;
   letter-spacing: .6px;
 }
-.tab.active{
-  background: var(--btn2);
-  border-color: transparent;
-}
+.tab.active{ background: var(--btnBlue); border-color: transparent; }
 
-.statusRow{
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--muted);
-}
+.statusRow{ margin-top: 8px; font-size: 12px; color: var(--muted); }
 .status.dirty{ color: var(--dirty); font-weight: 900; }
 
-.main{
-  padding: 10px 12px 18px;
-}
+.main{ padding: 10px 12px 18px; }
 
 .panel{
   background: rgba(255,255,255,0.02);
@@ -128,13 +103,12 @@ body{
   border-radius: 12px;
   font-weight: 900;
 }
-.btn.primary{
-  background: var(--btn2);
-  border-color: transparent;
-}
-.btn.danger{
-  background: var(--danger);
-  border-color: transparent;
+.btn.primary{ background: var(--btnBlue); border-color: transparent; }
+.btn.success{ background: var(--btnGreen); border-color: transparent; }
+.btn.danger{ background: var(--danger); border-color: transparent; }
+.btn:disabled{
+  opacity: .55;
+  cursor: not-allowed;
 }
 
 .input{
@@ -175,18 +149,20 @@ body{
 .field.dirty label{ color: var(--dirty); }
 .field.dirty input, .field.dirty textarea{ border-color: rgba(239,68,68,0.7); }
 
-/* System-generated (validated) address */
+/* System-validated address visual */
 .field.system input{
   text-transform: uppercase;
   font-weight: 900;
   letter-spacing: .3px;
 }
 
+/* Mini map */
 .miniMapWrap{
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.10);
   border-radius: 16px;
   overflow:hidden;
+  margin-bottom: 12px;
 }
 .miniMapHdr{
   display:flex;
@@ -202,11 +178,18 @@ body{
   font-size: 12px;
   color: var(--muted);
 }
-.miniBtns{ display:flex; gap:8px; flex-wrap:wrap; }
-.miniMap{
-  height: 150px;
-}
+.miniMap{ height: 150px; }
 
+/* Leaflet z-index fixes for mini map (stay under header) */
+#miniMap, .miniMapWrap { position: relative; z-index: 0; }
+#miniMap .leaflet-pane,
+#miniMap .leaflet-map-pane,
+#miniMap .leaflet-control-container,
+#miniMap .leaflet-top,
+#miniMap .leaflet-bottom,
+#miniMap .leaflet-control { z-index: 0 !important; }
+
+/* Map tab */
 .mapControls{
   display:flex;
   gap:10px;
@@ -215,28 +198,11 @@ body{
   justify-content:flex-start;
   margin-bottom: 10px;
 }
-.map{
-  height: 65vh;
-  border-radius: 16px;
-  overflow:hidden;
-  border: 1px solid rgba(255,255,255,0.10);
-}
+.map{ height: 65vh; border-radius: 16px; overflow:hidden; border: 1px solid rgba(255,255,255,0.10); }
+.mapStatus{ font-size: 12px; color: var(--muted); }
 
-.mapStatus{
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.toggle{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 900;
-}
+.toggle{ display:flex; align-items:center; gap:8px; color: var(--text); font-size: 12px; font-weight: 900; }
 .toggle input[type="checkbox"]{ transform: scale(1.2); }
-
 .radius{
   width: 84px;
   border-radius: 10px;
@@ -247,14 +213,8 @@ body{
   font-weight: 950;
 }
 
-.catalogTop{
-  display:flex;
-  gap:10px;
-  align-items:center;
-  justify-content:space-between;
-  margin-bottom: 12px;
-}
-
+/* Catalog */
+.catalogTop{ display:flex; gap:10px; align-items:center; justify-content:space-between; margin-bottom: 12px; }
 .list{ display:flex; flex-direction:column; gap:10px; }
 .item{
   border: 1px solid rgba(255,255,255,0.10);
@@ -262,28 +222,10 @@ body{
   border-radius: 14px;
   padding: 10px 10px;
 }
-.itemTop{
-  display:flex;
-  justify-content:space-between;
-  align-items:flex-start;
-  gap:10px;
-}
-.itemTitle{
-  font-weight: 950;
-  text-transform: uppercase;
-  letter-spacing: .6px;
-}
-.itemMeta{
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.itemBtns{
-  display:flex;
-  gap:8px;
-  flex-wrap:wrap;
-  margin-top: 10px;
-}
+.itemTop{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+.itemTitle{ font-weight: 950; text-transform: uppercase; letter-spacing: .6px; }
+.itemMeta{ margin-top: 4px; font-size: 12px; color: var(--muted); }
+.itemBtns{ display:flex; gap:8px; flex-wrap:wrap; margin-top: 10px; }
 
 .export{
   width:100%;
@@ -298,80 +240,7 @@ body{
 }
 
 
-/* Leaflet z-index fixes (mini map must stay UNDER sticky header) */
-#miniMap, .miniMapWrap { position: relative; z-index: 0; }
-#miniMap .leaflet-pane,
-#miniMap .leaflet-map-pane,
-#miniMap .leaflet-control-container,
-#miniMap .leaflet-top,
-#miniMap .leaflet-bottom,
-#miniMap .leaflet-control { z-index: 0 !important; }
-
-
-
-/* Address + validation horizontal layout */
-.address-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.address-row input {
-  flex: 1;
-}
-
-
-/* Record title row under main buttons */
-.ctxRow{
-  display:flex;
-  align-items:baseline;
-  gap:10px;
-  margin-top: 6px;
-}
-.ctxRow .ctxLabel{
-  font-size: 11px;
-  letter-spacing: .9px;
-  font-weight: 900;
-  color: var(--muted);
-}
-.ctxRow .ctxTitle{
-  flex:1;
-  min-width: 0;
-  font-size: 14px;
-  font-weight: 950;
-  letter-spacing: .6px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-}
-
-
-/* Address + validation button on one row */
-.field.addressRow .addressRowInner{
-  display:flex;
-  gap:10px;
-  align-items:stretch;
-}
-.field.addressRow .addressRowInner input{
-  flex:1;
-}
-.field.addressRow .addressRowInner .btn{
-  white-space: nowrap;
-}
-
-
-/* Address field placed BEFORE mini map */
-.addressTop{
-  margin-bottom: 14px;
-}
-.miniHdrActions{
-  margin-left: auto;
-  display:flex;
-  gap:10px;
-  align-items:center;
-}
-.miniMapHdr{
-  display:flex;
-  align-items:center;
-  gap:12px;
+/* Header visual boundary fix */
+.hdr{
+  box-shadow: 0 6px 12px rgba(0,0,0,0.35);
 }
