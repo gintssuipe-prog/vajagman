@@ -1,4 +1,4 @@
-const APP_VERSION = "v1.1.1";
+const APP_VERSION = "v1.1.2";
 const APP_DATE = "2026-01-04";
 
 // Storage
@@ -272,6 +272,13 @@ function applySystemAddressStyle(){
   if (!wrap) return;
   const isSystem = (!workingIsNew && addrSystemIds.has(working.id)) || (workingIsNew && working.__addrSystem === true);
   wrap.classList.toggle("system", !!isSystem);
+
+  // B: when system-validated, address becomes read-only (only re-validate can change it)
+  const inp = document.getElementById("ADRESE_LOKACIJA");
+  if (inp){
+    inp.disabled = !!isSystem;
+    wrap.classList.toggle("readonly", !!isSystem);
+  }
 }
 
 // ---------- Save / New ----------
@@ -336,10 +343,17 @@ async function validateAddress(){
       setStatus("Validācija: koordinātes neatradu (precizē adresi).", true);
       return;
     }
-    // overwrite address ALL CAPS (system semantics)
-    working.ADRESE_LOKACIJA = address.toUpperCase();
     working.LAT = String(geo.lat);
     working.LNG = String(geo.lng);
+
+    // Get grammatically correct address name from coordinates (reverse geocoding)
+    let pretty = "";
+    try{
+      pretty = await reverseGeocode(geo.lat, geo.lng);
+    } catch {}
+    const finalAddr = (pretty || address).trim();
+    // overwrite address ALL CAPS (system semantics)
+    working.ADRESE_LOKACIJA = finalAddr.toUpperCase();
 
     // mark system
     if (workingIsNew){
@@ -376,6 +390,25 @@ async function geocodeAddress(address){
   const arr = await res.json();
   if (!arr?.length) return null;
   return { lat: Number(arr[0].lat), lng: Number(arr[0].lon) };
+}
+
+
+async function reverseGeocode(lat, lng){
+  const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&zoom=18&addressdetails=1`;
+  const res = await fetch(url, { headers: { "Accept": "application/json" } });
+  if (!res.ok) throw new Error("Reverse geocoding kļūda: " + res.status);
+  const data = await res.json();
+  const a = data && data.address ? data.address : {};
+  const road = a.road || a.pedestrian || a.footway || a.cycleway || "";
+  const house = a.house_number || "";
+  const city = a.city || a.town || a.village || a.municipality || "";
+  const county = a.county || "";
+  const state = a.state || "";
+  let line1 = [road, house].filter(Boolean).join(" ").trim();
+  let line2 = city || county || state || "";
+  let out = [line1, line2].filter(Boolean).join(", ").trim();
+  if (!out) out = (data && data.display_name) ? String(data.display_name) : "";
+  return out;
 }
 
 // ---------- Google Maps deep link ----------
@@ -822,8 +855,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // record buttons
-  $("btnShowOnMap").addEventListener("click", showOnMap);
-  $("btnOpenMaps").addEventListener("click", () => {
+    $("btnOpenMaps").addEventListener("click", () => {
     const adr = (working?.ADRESE_LOKACIJA || "").trim();
     if (!adr){ setStatus("Nav adreses.", true); return; }
     openInGoogleMaps(adr);

@@ -28,7 +28,7 @@ body{
 .hdr{
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: 10000;
   background: linear-gradient(180deg, rgba(7,11,20,0.98), rgba(7,11,20,0.92));
   border-bottom: 1px solid rgba(255,255,255,0.08);
   padding: 10px 12px 8px;
@@ -295,4 +295,21 @@ body{
   color: var(--text);
   padding: 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+
+/* Leaflet z-index fixes (mini map must stay UNDER sticky header) */
+#miniMap, .miniMapWrap { position: relative; z-index: 0; }
+#miniMap .leaflet-pane,
+#miniMap .leaflet-map-pane,
+#miniMap .leaflet-control-container,
+#miniMap .leaflet-top,
+#miniMap .leaflet-bottom,
+#miniMap .leaflet-control { z-index: 0 !important; }
+
+/* Read-only system address (B: cannot edit; only re-validate) */
+.field.readonly input{
+  background: #cfe3ff;
+  cursor: not-allowed;
+  opacity: 0.95;
 }
