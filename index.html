@@ -20,20 +20,18 @@
       <div class="hdrTop">
         <div class="brand">
           <div class="appName">VAJAGMAN</div>
-          <div class="ver">v1.1.4 · 2026-01-04</div>
+          <div class="ver">v1.1.5 · 2026-01-04</div>
         </div>
 
-        <div class="ctx">
-          <div class="ctxLabel">IERAKSTS</div>
-          <div id="ctxTitle" class="ctxTitle">—</div>
-        </div>
-
-        <div class="hdrActions" id="hdrActions">
-          <!-- context actions injected by JS -->
-        </div>
+        <div class="hdrActions" id="hdrActions"></div>
       </div>
 
-      <nav class="tabs" role="tablist" aria-label="Režīmi">
+      <div class="ctxRow">
+        <div class="ctxLabel">IERAKSTS</div>
+        <div id="ctxTitle" class="ctxTitle">—</div>
+      </div>
+
+      <nav class="tabs"<nav class="tabs" role="tablist" aria-label="Režīmi">
         <button class="tab active" data-tab="record">IERAKSTS</button>
         <button class="tab" data-tab="map">KARTE</button>
         <button class="tab" data-tab="catalog">KATALOGS</button>
@@ -50,9 +48,7 @@
         <div class="miniMapWrap">
           <div class="miniMapHdr">
             <span class="miniTitle">KARTE</span>
-            <div class="miniBtns">
-<button id="btnOpenMaps" class="btn">Google Maps</button>
-            </div>
+            
           </div>
           <div id="miniMap" class="miniMap"></div>
         </div>

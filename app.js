@@ -1,4 +1,4 @@
-const APP_VERSION = "v1.1.3";
+const APP_VERSION = "v1.1.5";
 const APP_DATE = "2026-01-04";
 
 // Storage
@@ -140,12 +140,6 @@ function renderHeaderActions(){
     btnNew.textContent = "JAUNS";
     btnNew.onclick = createNewRecord;
     root.appendChild(btnNew);
-
-    const btnValidate = document.createElement("button");
-    btnValidate.className = "btn";
-    btnValidate.textContent = "ADRESES VALIDĀCIJA";
-    btnValidate.onclick = validateAddress;
-    root.appendChild(btnValidate);
   } else {
     // no global actions for map/catalog (per spec)
   }
@@ -272,7 +266,28 @@ function buildForm(root, obj){
     });
 
     wrap.appendChild(label);
-    wrap.appendChild(input);
+
+    if (f.key === "ADRESE_LOKACIJA"){
+      // Horizontal layout: [address input] [ADRESES VALIDĀCIJA]
+      wrap.classList.add("addressRow");
+
+      const row = document.createElement("div");
+      row.className = "addressRowInner";
+
+      row.appendChild(input);
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn";
+      btn.textContent = "ADRESES VALIDĀCIJA";
+      btn.addEventListener("click", validateAddress);
+      row.appendChild(btn);
+
+      wrap.appendChild(row);
+    } else {
+      wrap.appendChild(input);
+    }
+
     root.appendChild(wrap);
   }
 }
@@ -865,9 +880,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // record buttons
-    $("btnOpenMaps").addEventListener("click", () => {
-    const adr = (working?.ADRESE_LOKACIJA || "").trim();
-    if (!adr){ setStatus("Nav adreses.", true); return; }
+        if (!adr){ setStatus("Nav adreses.", true); return; }
     openInGoogleMaps(adr);
   });
 

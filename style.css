@@ -318,3 +318,43 @@ body{
 .address-row input {
   flex: 1;
 }
+
+
+/* Record title row under main buttons */
+.ctxRow{
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  margin-top: 6px;
+}
+.ctxRow .ctxLabel{
+  font-size: 11px;
+  letter-spacing: .9px;
+  font-weight: 900;
+  color: var(--muted);
+}
+.ctxRow .ctxTitle{
+  flex:1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 950;
+  letter-spacing: .6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+}
+
+
+/* Address + validation button on one row */
+.field.addressRow .addressRowInner{
+  display:flex;
+  gap:10px;
+  align-items:stretch;
+}
+.field.addressRow .addressRowInner input{
+  flex:1;
+}
+.field.addressRow .addressRowInner .btn{
+  white-space: nowrap;
+}
