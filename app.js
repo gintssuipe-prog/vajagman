@@ -1,4 +1,4 @@
-const APP_VERSION = "v1.1.5";
+const APP_VERSION = "v1.1.6";
 const APP_DATE = "2026-01-04";
 
 // Storage
@@ -877,11 +877,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // tabs
   document.querySelectorAll(".tab").forEach(btn => {
     btn.addEventListener("click", () => switchTab(btn.dataset.tab));
-  });
-
-  // record buttons
-        if (!adr){ setStatus("Nav adreses.", true); return; }
-    openInGoogleMaps(adr);
   });
 
   // map buttons
