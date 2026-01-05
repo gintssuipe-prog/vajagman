@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v1.2.1";
+const APP_VERSION = "v1.2.2";
 const APP_DATE = "2026-01-05";
 
 const STORAGE_KEY_OBJECTS = "vajagman_objects_v3";
@@ -112,27 +112,6 @@ function hasMeaningfulData(obj){
   return keys.some(k => String(obj[k] || "").trim().length > 0);
 }
 
-function renderHeaderActions(){
-  const root = $("hdrActions");
-  root.innerHTML = "";
-
-  const btnSave = document.createElement("button");
-  btnSave.id = "btnSave";
-  btnSave.className = "btn";
-  btnSave.textContent = "SAGLABĀT";
-  btnSave.onclick = saveWorking;
-
-  const btnNew = document.createElement("button");
-  btnNew.id = "btnNew";
-  btnNew.className = "btn success";
-  btnNew.textContent = "JAUNS";
-  btnNew.onclick = createNewRecord;
-
-  root.appendChild(btnSave);
-  root.appendChild(btnNew);
-
-  refreshSaveButton();
-}
 
 
 function wireHeaderActions(){
@@ -779,7 +758,8 @@ document.addEventListener("DOMContentLoaded", () => {
   addrSystemIds = loadAddrSystemIds();
   currentId = loadCurrentId();
 
-  renderHeaderActions();
+  wireHeaderActions();
+  updateHdrActionBar();
 
   wireHeaderActions();
   updateHdrActionBar();
