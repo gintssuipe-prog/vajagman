@@ -351,3 +351,26 @@ textarea.autogrow{
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* v1.3.0 - standardized input control: everything is textarea (single-line start, autogrow) */
+textarea.input{
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 14px;
+  border: 2px solid rgba(255,120,120,.85);
+  background: rgba(225,240,255,.95);
+  color: #09101a;
+  padding: 12px 14px;
+  font-size: 16px;
+  line-height: 1.25;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 48px;
+  height: 48px;
+}
+textarea.input:focus{
+  outline: none;
+  border-color: rgba(255,170,120,.95);
+}

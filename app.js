@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v1.2.9";
+const APP_VERSION = "v1.3.0";
 const APP_DATE = "2026-01-05";
 
 const STORAGE_KEY_OBJECTS = "vajagman_objects_v3";
@@ -839,3 +839,21 @@ wireAutoGrow();
 document.addEventListener('DOMContentLoaded', ()=>{
   if (typeof wireAutoGrow === 'function') wireAutoGrow();
 });
+
+
+// v1.3.0 - ensure autogrow is wired after any render that recreates DOM
+(function(){
+  if(typeof wireAutoGrow !== 'function') return;
+  const wrap = (fn)=>{
+    if(typeof fn !== 'function') return fn;
+    return function(){
+      const r = fn.apply(this, arguments);
+      try{ wireAutoGrow(); }catch(e){}
+      return r;
+    }
+  };
+  if(typeof renderRecordView === 'function') renderRecordView = wrap(renderRecordView);
+  if(typeof renderMapView === 'function') renderMapView = wrap(renderMapView);
+  if(typeof renderCatalogView === 'function') renderCatalogView = wrap(renderCatalogView);
+})();
+
