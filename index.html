@@ -13,37 +13,32 @@
 </head>
 <body>
   <div class="app">
-    <header class="hdr">
-      <div class="hdrTop">
-        <div class="brandLine">VAJAGMAN BETA © Gints Suipe</div>
-        <div class="verBadge">v1.2.3 · 2026-01-05</div>
+    
+<header class="hdr">
+  <div class="hdr-top">
+    <span class="appTitle">VAJAGMAN BETA © Gints Suipe</span>
+    <span class="appVer">v1.2.4 · 2026-01-05</span>
+  </div>
+  <div class="hdr-tabs">
+    <button class="tab active" data-tab="record">IERAKSTS</button>
+    <button class="tab" data-tab="map">KARTE</button>
+    <button class="tab" data-tab="catalog">KATALOGS</button>
+  </div>
+  <div class="hdr-sub">
+    <div class="hdr-sub-record">
+      <div class="ctxRow"><span id="ctxTitle">—</span></div>
+      <div class="hdr-actions">
+        <button id="btnValidateAddress" class="btn warn">VALIDĒT</button>
+        <button id="btnGps" class="btn warn">GPS</button>
+        <button id="btnSave" class="btn">SAGLABĀT</button>
+        <button id="btnNew" class="btn success">JAUNS</button>
       </div>
+    </div>
+    <div class="hdr-sub-map hidden"></div>
+    <div class="hdr-sub-catalog hidden"></div>
+  </div>
+</header>
 
-      <nav class="tabs" role="tablist" aria-label="Režīmi">
-        <button class="tab active" data-tab="record">IERAKSTS</button>
-        <button class="tab" data-tab="map">KARTE</button>
-        <button class="tab" data-tab="catalog">KATALOGS</button>
-      </nav>
-
-      <div class="statusRow">
-        <span id="status" class="status">Gatavs.</span>
-      </div>
-
-      <div class="ctxRow">
-        <div id="ctxTitle" class="ctxTitle">—</div>
-      </div>
-
-      <div id="hdrActionBar" class="hdrActionBar hidden">
-        <div class="hdrActionLeft">
-          <button id="btnValidateAddress" class="btn warn">VALIDĒT</button>
-          <button id="btnGps" class="btn warn">GPS</button>
-        </div>
-        <div class="hdrActionRight">
-          <button id="btnSave" class="btn">SAGLABĀT</button>
-          <button id="btnNew" class="btn success">JAUNS</button>
-        </div>
-      </div>
-    </header>
 
     <main class="main">
       <section class="panel" id="tab-record">

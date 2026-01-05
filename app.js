@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v1.2.3";
+const APP_VERSION = "v1.2.4";
 const APP_DATE = "2026-01-05";
 
 const STORAGE_KEY_OBJECTS = "vajagman_objects_v3";
@@ -631,6 +631,7 @@ function switchTab(name){
   if (activeTab === "record" && name !== "record") discardUnsavedChangesIfNeeded();
 
   activeTab = name;
+  updateSubHeaders();
   document.querySelectorAll(".panel").forEach(p => p.classList.add("hidden"));
   $("tab-" + name).classList.remove("hidden");
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
@@ -807,3 +808,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   registerSW();
 });
+
+function updateSubHeaders(){
+  const rec=document.querySelector('.hdr-sub-record');
+  const map=document.querySelector('.hdr-sub-map');
+  const cat=document.querySelector('.hdr-sub-catalog');
+  if(!rec||!map||!cat) return;
+  rec.classList.toggle('hidden',activeTab!=='record');
+  map.classList.toggle('hidden',activeTab!=='map');
+  cat.classList.toggle('hidden',activeTab!=='catalog');
+}

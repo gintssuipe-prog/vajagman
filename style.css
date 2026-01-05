@@ -313,3 +313,9 @@ body{
   justify-content:space-between;
   gap:10px;
 }
+
+.hdr{padding:10px;border-bottom:1px solid rgba(255,255,255,.08)}
+.hdr-top{display:flex;justify-content:space-between;font-size:12px;color:#9aa}
+.hdr-tabs{display:flex;gap:8px;margin-top:6px}
+.hdr-sub{margin-top:6px}
+.hdr-actions{display:flex;gap:8px;flex-wrap:wrap}
