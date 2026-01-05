@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v1.2.4";
+const APP_VERSION = "v1.2.5";
 const APP_DATE = "2026-01-05";
 
 const STORAGE_KEY_OBJECTS = "vajagman_objects_v3";

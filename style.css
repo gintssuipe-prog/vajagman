@@ -319,3 +319,5 @@ body{
 .hdr-tabs{display:flex;gap:8px;margin-top:6px}
 .hdr-sub{margin-top:6px}
 .hdr-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+.hdr-status{margin-top:6px;font-size:12px;color:var(--muted);}
