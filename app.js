@@ -1,6 +1,6 @@
 
-const APP_VERSION = "v1.2.0";
-const APP_DATE = "2026-01-04";
+const APP_VERSION = "v1.2.1";
+const APP_DATE = "2026-01-05";
 
 const STORAGE_KEY_OBJECTS = "vajagman_objects_v3";
 const STORAGE_KEY_CURRENT = "vajagman_current_id_v3";
@@ -112,17 +112,47 @@ function hasMeaningfulData(obj){
   return keys.some(k => String(obj[k] || "").trim().length > 0);
 }
 
+function renderHeaderActions(){
+  const root = $("hdrActions");
+  root.innerHTML = "";
 
-function wireRecordActions(){
+  const btnSave = document.createElement("button");
+  btnSave.id = "btnSave";
+  btnSave.className = "btn";
+  btnSave.textContent = "SAGLABĀT";
+  btnSave.onclick = saveWorking;
+
+  const btnNew = document.createElement("button");
+  btnNew.id = "btnNew";
+  btnNew.className = "btn success";
+  btnNew.textContent = "JAUNS";
+  btnNew.onclick = createNewRecord;
+
+  root.appendChild(btnSave);
+  root.appendChild(btnNew);
+
+  refreshSaveButton();
+}
+
+
+function wireHeaderActions(){
   const btnSave = $("btnSave");
   const btnNew = $("btnNew");
   const btnVal = $("btnValidateAddress");
+  const btnGps = $("btnGps");
 
   if (btnSave) btnSave.onclick = saveWorking;
   if (btnNew) btnNew.onclick = createNewRecord;
   if (btnVal) btnVal.onclick = validateAddress;
+  if (btnGps) btnGps.onclick = fillFromGPS;
 
   refreshSaveButton();
+}
+
+function updateHdrActionBar(){
+  const bar = $("hdrActionBar");
+  if (!bar) return;
+  bar.classList.toggle("hidden", activeTab !== "record");
 }
 
 function refreshSaveButton(){
@@ -342,6 +372,41 @@ async function reverseGeocode(lat, lng){
 }
 
 // Address validation (writes pretty address ALL CAPS + LAT/LNG)
+async function fillFromGPS(){
+  if (!working) return;
+  try{
+    setStatus("GPS: nosaku lokāciju…", false);
+    const me = await getCoords();
+    working.LAT = String(me.lat);
+    working.LNG = String(me.lng);
+    $("LAT").value = working.LAT;
+    $("LNG").value = working.LNG;
+
+    let pretty = "";
+    try { pretty = await reverseGeocode(me.lat, me.lng); } catch {}
+    if (pretty){
+      working.ADRESE_LOKACIJA = pretty.toUpperCase();
+      $("ADRESE_LOKACIJA").value = working.ADRESE_LOKACIJA;
+
+      if (workingIsNew) working.__addrSystem = true;
+      else if (currentId) { addrSystemIds.add(currentId); saveAddrSystemIds(); }
+      applySystemAddressStyle();
+
+      document.querySelector('.field.addressStandalone')?.classList.add("dirty");
+      markDirty("ADRESE_LOKACIJA");
+    }
+
+    markDirty("LAT");
+    markDirty("LNG");
+
+    refreshMarkers();
+    updateMiniMap();
+    setStatus("GPS: adrese + koordinātes ieliktas. Nospied SAGLABĀT.", true);
+  }catch{
+    setStatus("GPS: neizdevās (atļaujas / GPS / internets).", true);
+  }
+}
+
 async function validateAddress(){
   if (!working) return;
   const address = String(working.ADRESE_LOKACIJA || "").trim();
@@ -714,7 +779,10 @@ document.addEventListener("DOMContentLoaded", () => {
   addrSystemIds = loadAddrSystemIds();
   currentId = loadCurrentId();
 
-  wireRecordActions();
+  renderHeaderActions();
+
+  wireHeaderActions();
+  updateHdrActionBar();
 
   // Address wire-up
   wireAddressInput();

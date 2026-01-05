@@ -7,6 +7,7 @@
   --btn:#1e293b;
   --btnBlue:#2563eb;
   --btnGreen:#16a34a;
+  --btnWarn:#f59e0b;
   --danger:#b91c1c;
   --field:#dbeafe;
   --fieldText:#0b1220;
@@ -246,19 +247,60 @@ body{
 }
 
 
-/* Record-only action bar (visible only in IERAKSTS tab) */
-.recordActions{
+/* Header compact: title + version in one row */
+.brandLine{
+  font-weight: 950;
+  letter-spacing: .6px;
+  font-size: 13px;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+.verBadge{
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 900;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.03);
+}
+
+.hdrTop{
+  align-items:center;
+}
+
+/* Record-only action buttons at bottom of header */
+.hdrActionBar{
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.08);
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:10px;
-  margin-bottom: 10px;
 }
-.recordActionsRight{
+.hdrActionLeft, .hdrActionRight{
   display:flex;
   gap:10px;
   align-items:center;
+  flex-wrap:wrap;
+}
+.hdrActionBar .btn{
+  padding: 7px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+.btn.warn{
+  background: var(--btnWarn);
+  border-color: transparent;
+  color: #0b1220;
+  font-weight: 950;
 }
 
-/* Header: actions removed */
-.hdrTop{ justify-content:flex-start; }
+/* Slightly smaller tabs to save header height */
+.tab{ padding: 9px 10px; }
+
