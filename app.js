@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v1.2.8";
+const APP_VERSION = "v1.2.9";
 const APP_DATE = "2026-01-05";
 
 const STORAGE_KEY_OBJECTS = "vajagman_objects_v3";
@@ -822,8 +822,10 @@ function updateSubHeaders(){
 
 function autoGrow(el){
   if(!el) return;
+  const min = 48;
   el.style.height = "auto";
-  el.style.height = el.scrollHeight + "px";
+  const h = Math.max(min, el.scrollHeight);
+  el.style.height = h + "px";
 }
 function wireAutoGrow(){
   document.querySelectorAll('textarea.autogrow').forEach(el=>{
@@ -833,3 +835,7 @@ function wireAutoGrow(){
 }
 
 wireAutoGrow();
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  if (typeof wireAutoGrow === 'function') wireAutoGrow();
+});

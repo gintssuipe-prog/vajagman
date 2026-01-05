@@ -341,3 +341,13 @@ input, textarea, select, button{font-family: inherit;}
 input, textarea{font-size:16px;line-height:1.25;}
 textarea{resize:none;overflow:hidden;white-space:pre-wrap;word-break:break-word;}
 textarea.input{padding-top:12px;padding-bottom:12px}
+
+/* v1.2.9 - all fields start single-line, auto-grow on input */
+textarea.autogrow{
+  min-height: 48px;         /* same visual height as inputs */
+  height: 48px;             /* initial single-line height */
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
