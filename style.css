@@ -304,3 +304,12 @@ body{
 /* Slightly smaller tabs to save header height */
 .tab{ padding: 9px 10px; }
 
+
+
+/* v1.2.3 header structure fix */
+.hdrTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
