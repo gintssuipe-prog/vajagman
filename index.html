@@ -17,16 +17,16 @@
 <header class="hdr">
   <div class="hdr-top">
     <span class="appTitle">VAJAGMAN BETA © Gints Suipe</span>
-    <span class="appVer">v1.2.7 · 2026-01-05</span>
+    <span class="appVer">v1.2.8 · 2026-01-05</span>
   </div>
   <div class="hdr-tabs">
     <button class="tab active" data-tab="record">IERAKSTS</button>
     <button class="tab" data-tab="map">KARTE</button>
     <button class="tab" data-tab="catalog">KATALOGS</button>
   </div>
-  <div class="hdr-status"><span id="status">Gatavs.</span></div>
-  <div class="hdr-sub">
+<div class="hdr-sub">
     <div class="hdr-sub-record">
+      <div class="hdr-status" id="statusRow"><span id="status">Gatavs.</span></div>
       <div class="ctxRow"><span id="ctxTitle">—</span></div>
       <div class="hdr-actions">
         <div class="hdr-actions-left">
@@ -50,7 +50,7 @@
         <!-- Address BEFORE mini map -->
         <div class="field addressStandalone" data-key="ADRESE_LOKACIJA">
           <label for="ADRESE_LOKACIJA">ADRESE/LOKĀCIJA</label>
-          <input id="ADRESE_LOKACIJA" type="text" class="input" />
+          <textarea id="ADRESE_LOKACIJA" class="input autogrow" / rows="1"></textarea>
         </div>
 
         <div class="miniMapWrap">

@@ -326,3 +326,18 @@ body{
 .hdr-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:nowrap}
 .hdr-actions-left,.hdr-actions-right{display:flex;gap:8px;align-items:center}
 .hdr-actions-right{margin-left:auto}
+
+/* v1.2.8 - status only in record + spacing */
+.hdr-status{margin-top:6px;font-size:12px;color:var(--muted);line-height:1.2}
+.ctxRow{margin-top:4px;margin-bottom:10px;line-height:1.25}
+#ctxTitle{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* v1.2.8 - map rounding */
+.miniMapWrap{border-radius:16px}
+.miniMapWrap iframe,.miniMapWrap img,.miniMapWrap .miniMap{border-radius:16px}
+
+/* v1.2.8 - consistent typography + wrap/autogrow */
+input, textarea, select, button{font-family: inherit;}
+input, textarea{font-size:16px;line-height:1.25;}
+textarea{resize:none;overflow:hidden;white-space:pre-wrap;word-break:break-word;}
+textarea.input{padding-top:12px;padding-bottom:12px}
