@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v1.2.5";
+const APP_VERSION = "v1.2.6";
 const APP_DATE = "2026-01-05";
 
 const STORAGE_KEY_OBJECTS = "vajagman_objects_v3";
@@ -41,6 +41,7 @@ function saveJson(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
 
 function setStatus(msg, dirty=false){
   const el = $("status");
+  if (!el) return;
   el.textContent = msg;
   el.classList.toggle("dirty", !!dirty);
 }
