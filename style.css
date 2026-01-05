@@ -153,14 +153,14 @@ body{
 /* System-validated address visual */
 .field.system input{
   text-transform: uppercase;
-  font-weight: 900;
-  letter-spacing: .3px;
+  font-weight: 500;
+  letter-spacing: .2px;
 }
 
 /* Mini map */
 .miniMapWrap{
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.10);
+  background: transparent;
+  border: none;
   border-radius: 16px;
   overflow:hidden;
   margin-bottom: 12px;
@@ -321,3 +321,8 @@ body{
 .hdr-actions{display:flex;gap:8px;flex-wrap:wrap}
 
 .hdr-status{margin-top:6px;font-size:12px;color:var(--muted);}
+
+/* v1.2.7 header actions layout */
+.hdr-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:nowrap}
+.hdr-actions-left,.hdr-actions-right{display:flex;gap:8px;align-items:center}
+.hdr-actions-right{margin-left:auto}

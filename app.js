@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v1.2.6";
+const APP_VERSION = "v1.2.7";
 const APP_DATE = "2026-01-05";
 
 const STORAGE_KEY_OBJECTS = "vajagman_objects_v3";
@@ -80,8 +80,8 @@ function parseLatLng(o){
 function titleFromRecord(o){
   const adr = String(o?.ADRESE_LOKACIJA || "").trim();
   const code = String(o?.DURVJU_KODS_PIEKLUVE || "").trim();
-  const oneLineCode = code.split(/\r?\n/)[0].trim();
-  const t = (adr + " " + oneLineCode).trim();
+  const oneLineCode = code.split(/\\r?\\n/)[0].trim();
+  const t = oneLineCode ? (adr + ", " + oneLineCode).trim() : adr;
   return t || "—";
 }
 
@@ -94,7 +94,7 @@ function updateCtxTitle(){
     return;
   }
   const saved = getSavedById(currentId);
-  $("ctxTitle").textContent = titleFromRecord(saved).toUpperCase();
+  $("ctxTitle").textContent = titleFromRecord(saved);
 }
 
 function applySystemAddressStyle(){ 
@@ -525,7 +525,7 @@ function ensureMap(){
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c])); }
 
 function objectPopupHtml(o){
-  const title = titleFromRecord(o).toUpperCase();
+  const title = titleFromRecord(o);
   const lines = [
     `<div style="font-weight:900;margin-bottom:6px;">${escapeHtml(title)}</div>`,
     o.ADRESES_LOKACIJAS_PIEZIMES ? `<div><b>Piezīmes:</b> ${escapeHtml(o.ADRESES_LOKACIJAS_PIEZIMES)}</div>` : "",
@@ -678,7 +678,7 @@ function refreshCatalog(){
 
     const title = document.createElement("div");
     title.className = "itemTitle";
-    title.textContent = titleFromRecord(o).toUpperCase();
+    title.textContent = titleFromRecord(o);
 
     const meta = document.createElement("div");
     meta.className = "itemMeta";
