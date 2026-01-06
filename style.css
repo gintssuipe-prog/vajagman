@@ -374,12 +374,3 @@ textarea.input:focus{
   outline: none;
   border-color: rgba(255,170,120,.95);
 }
-
-/* v1.3.1 - tighter single-line look (less '2-line' visual height) */
-textarea.input{
-  line-height: 1.2;
-  padding-top: 10px;
-  padding-bottom: 10px;
-  min-height: 44px;
-  height: 44px;
-}

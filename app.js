@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v1.3.1";
+const APP_VERSION = "v1.3.0";
 const APP_DATE = "2026-01-05";
 
 const STORAGE_KEY_OBJECTS = "vajagman_objects_v3";
@@ -822,7 +822,7 @@ function updateSubHeaders(){
 
 function autoGrow(el){
   if(!el) return;
-  const min = 44;
+  const min = 48;
   el.style.height = "auto";
   const h = Math.max(min, el.scrollHeight);
   el.style.height = h + "px";
