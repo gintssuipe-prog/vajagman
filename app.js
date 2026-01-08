@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.0.2";
+const APP_VERSION = "v3.0.3";
 const APP_DATE = "2026-01-08";
 
 
@@ -33,14 +33,36 @@ function setDbLed(state){
 
 async function apiCall(action, payload){
   if (!API_BASE) throw new Error("API_BASE nav iestatīts");
+  // NOTE: Apps Script WebApp bieži noliek CORS preflight, ja sūti application/json.
+  // Tāpēc sūtām kā text/plain (simple request) un ķermenis ir JSON.
   const res = await fetch(API_BASE, {
     method: "POST",
-    headers: {"Content-Type":"application/json"},
+    headers: {"Content-Type":"text/plain;charset=utf-8"},
+    cache: "no-store",
     body: JSON.stringify({action, ...payload})
   });
-  const data = await res.json().catch(()=>null);
+	// Ja WebApp nav publisks, Google mēdz atgriezt HTML (login/permission) un JSON parse izgāžas.
+	let data = null;
+	let rawText = "";
+	try {
+	  data = await res.json();
+	} catch(e) {
+	  try { rawText = await res.text(); } catch(_) {}
+	}
+	if (!data && rawText) {
+	  const t = rawText.toLowerCase();
+	  if (t.includes("<html") || t.includes("accounts.google.com") || t.includes("permission") ) {
+	    throw new Error("Google WebApp nav publisks (Deploy: 'Who has access' -> 'Anyone').");
+	  }
+	  throw new Error("API atbilde nav JSON. Iespējams, CORS/redirect/proxy.");
+	}
   if (!res.ok) throw new Error((data && data.error) ? data.error : ("HTTP " + res.status));
-  if (!data) throw new Error("Tukša atbilde no DB");
+	if (!data) {
+	  const hint = rawText && rawText.toLowerCase().includes("accounts.google.com")
+	    ? "WebApp nav publisks (Deploy: 'Anyone')."
+	    : "Tukša/nesaprotama atbilde no DB.";
+	  throw new Error(hint);
+	}
   return data;
 }
 
