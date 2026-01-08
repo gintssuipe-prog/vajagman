@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.0.5";
+const APP_VERSION = "v3.0.6";
 const APP_DATE = "2026-01-08";
 
 
@@ -119,7 +119,7 @@ async function fullSync(){
     const r = await apiCall("getAll", {since});
     if (r && r.ok){
       const remote = Array.isArray(r.records) ? r.records : [];
-      mergeRemote(remote);
+      mergeRemote(remote.map(fromDbRecord_));
       localStorage.setItem(STORAGE_KEY_LASTSYNC, r.now || new Date().toISOString());
       dbOnline = true;
       setDbLed("online");
@@ -169,9 +169,10 @@ async function pushUpsert(record, baseVersion){
   try{
     pendingSync = true;
     setDbLed("syncing");
-    const r = await apiCall("save", {user:userLabel, record, baseVersion: Number(baseVersion||0)});
+    const dbRecord = toDbRecord_(record);
+    const r = await apiCall("save", {user:userLabel, record: dbRecord, baseVersion: Number(baseVersion||0)});
     if (r && r.ok && r.record){
-      mergeRemote([r.record]);
+      mergeRemote([fromDbRecord_(r.record)]);
       pendingSync = false;
       setDbLed("online");
       // Ja šobrīd nav nesaglabātu izmaiņu, parādām mierīgu statusu
@@ -198,7 +199,7 @@ async function pushDelete(id, baseVersion){
     setDbLed("syncing");
     const r = await apiCall("delete", {user:userLabel, id, baseVersion: Number(baseVersion||0)});
     if (r && r.ok && r.record){
-      mergeRemote([r.record]);
+      mergeRemote([fromDbRecord_(r.record)]);
       setDbLed("online");
     }
   }catch(e){
@@ -240,6 +241,63 @@ const schema = [
   { key: "LAT", label: "LAT (koordinātes)", type: "textarea" },
   { key: "LNG", label: "LNG (koordinātes)", type: "textarea" },
 ];
+
+// ---- DB field mapping (Sheets headers <-> UI keys) ----
+// Sheets headers are snake_case; UI uses legacy keys (UPPERCASE).
+function toDbRecord_(o){
+  const r = Object.assign({}, o);
+
+  // UI -> DB
+  r.adrese = (o.ADRESE_LOKACIJA ?? o.adrese ?? "");
+  r.durvju_kods = (o.DURVJU_KODS_PIEKLUVE ?? o.durvju_kods ?? "");
+  r.tel = (o.PIEKLUVES_KONTAKTI ?? o.tel ?? "");
+  r.vards = (o.VARDS ?? o.vards ?? "");
+
+  r.objekta_nr = (o.OBJEKTA_NR ?? o.objekta_nr ?? "");
+  r.pults_remote_parole = (o.REMOTEPAROLE ?? o.pults_remote_parole ?? "");
+  r.panelis_marka_modelis = (o.PANELIS_MARKA ?? o.panelis_marka_modelis ?? "");
+
+  r.parole1 = (o.PAROLE1 ?? o.parole1 ?? "");
+  r.parole2 = (o.PAROLE2 ?? o.parole2 ?? "");
+  r.parole3 = (o.PAROLE3 ?? o.parole3 ?? "");
+
+  r.piezimes1 = (o.PIEZIMES1 ?? o.piezimes1 ?? "");
+  r.piezimes2 = (o.PIEZIMES2 ?? o.piezimes2 ?? "");
+  r.konfiguracija = (o.KONFIGURACIJA ?? o.konfiguracija ?? "");
+
+  r.lat = (o.LAT ?? o.lat ?? "");
+  r.lng = (o.LNG ?? o.lng ?? "");
+
+  return r;
+}
+
+function fromDbRecord_(o){
+  const r = Object.assign({}, o);
+
+  // DB -> UI (prefer UI keys if already present)
+  if (r.ADRESE_LOKACIJA === undefined) r.ADRESE_LOKACIJA = (o.adrese ?? "");
+  if (r.DURVJU_KODS_PIEKLUVE === undefined) r.DURVJU_KODS_PIEKLUVE = (o.durvju_kods ?? "");
+  if (r.PIEKLUVES_KONTAKTI === undefined) r.PIEKLUVES_KONTAKTI = (o.tel ?? "");
+  if (r.VARDS === undefined) r.VARDS = (o.vards ?? "");
+
+  if (r.OBJEKTA_NR === undefined) r.OBJEKTA_NR = (o.objekta_nr ?? "");
+  if (r.REMOTEPAROLE === undefined) r.REMOTEPAROLE = (o.pults_remote_parole ?? "");
+  if (r.PANELIS_MARKA === undefined) r.PANELIS_MARKA = (o.panelis_marka_modelis ?? "");
+
+  if (r.PAROLE1 === undefined) r.PAROLE1 = (o.parole1 ?? "");
+  if (r.PAROLE2 === undefined) r.PAROLE2 = (o.parole2 ?? "");
+  if (r.PAROLE3 === undefined) r.PAROLE3 = (o.parole3 ?? "");
+
+  if (r.PIEZIMES1 === undefined) r.PIEZIMES1 = (o.piezimes1 ?? "");
+  if (r.PIEZIMES2 === undefined) r.PIEZIMES2 = (o.piezimes2 ?? "");
+  if (r.KONFIGURACIJA === undefined) r.KONFIGURACIJA = (o.konfiguracija ?? "");
+
+  if (r.LAT === undefined) r.LAT = (o.lat ?? "");
+  if (r.LNG === undefined) r.LNG = (o.lng ?? "");
+
+  return r;
+}
+
 
 
 // IERAKSTS apakš-šķirkļi (UI filtrs; datu modelis nemainās)
@@ -584,7 +642,8 @@ async function saveWorking(){
   setStatus("Saglabāts lokāli (sinhronizējas)...", false);
 
   // mēģinām uzreiz aizsūtīt uz DB (ja sesija ir ok)
-  if (sessionOk && dbOnline){
+  const sessionOkNow = (sessionStorage.getItem(SESSION_OK_KEY) === "1");
+  if (userLabel && sessionOkNow && dbOnline){
     const baseVersion = Number(savedSnapshot.version || 0);
     await pushUpsert(structuredClone(savedSnapshot), baseVersion);
   }
