@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.0.4";
+const APP_VERSION = "v3.0.5";
 const APP_DATE = "2026-01-08";
 
 
@@ -22,13 +22,14 @@ const STORAGE_KEY_LASTSYNC = "vajagman_last_sync_v1";
 let userLabel = localStorage.getItem(STORAGE_KEY_PIN_LABEL) || "";
 let dbOnline = false;
 let dbSyncing = false;
+let pendingSync = false; // saglabāts lokāli, bet vēl nav apstiprināts no servera
 
 function setDbLed(state){
   const led = document.getElementById("dbLed");
   if (!led) return;
-  led.classList.remove("offline","online","syncing");
+  led.classList.remove("offline","online","syncing","pending");
   led.classList.add(state);
-  led.title = state === "online" ? "DB: sync" : (state === "syncing" ? "DB: sinhronizē..." : "DB: offline");
+  led.title = state === "online" ? "DB: sync" : (state === "syncing" ? "DB: sinhronizē..." : (state === "pending" ? "DB: saglabāts lokāli" : "DB: offline"));
 }
 
 async function apiCall(action, payload){
@@ -130,6 +131,10 @@ async function fullSync(){
     // nerakstām agresīvu error statusu, lai netraucē darbam offline
   }finally{
     dbSyncing = false;
+    // pēc sinhronizācijas atjaunojam LED atbilstoši arī “lokāli saglabāts” stāvoklim
+    if (!dbOnline) setDbLed("offline");
+    else if (pendingSync) setDbLed("pending");
+    else setDbLed("online");
   }
 }
 
@@ -162,14 +167,24 @@ function mergeRemote(remote){
 async function pushUpsert(record, baseVersion){
   if (!userLabel || !API_BASE) return;
   try{
+    pendingSync = true;
     setDbLed("syncing");
     const r = await apiCall("save", {user:userLabel, record, baseVersion: Number(baseVersion||0)});
     if (r && r.ok && r.record){
       mergeRemote([r.record]);
+      pendingSync = false;
       setDbLed("online");
+      // Ja šobrīd nav nesaglabātu izmaiņu, parādām mierīgu statusu
+      if (dirtyFields.size === 0) setStatus("Saglabāts.", false);
     }
   }catch(e){
-    setDbLed("offline");
+    // paliek lokāli saglabāts; ja internets nav pieejams, rādam offline
+    pendingSync = true;
+    if (String(e.message||"").toLowerCase().includes("failed") || String(e.message||"").toLowerCase().includes("fetch")) {
+      setDbLed("offline");
+    } else {
+      setDbLed("pending");
+    }
     // konflikts: paziņojam un atstājam lokāli
     if (String(e.message||"").toLowerCase().includes("conflict")){
       alert("Konflikts: kāds jau ir izmainījis šo ierakstu. Atjauno KATALOGU un mēģini vēlreiz.");
@@ -401,10 +416,11 @@ function refreshSaveButton(){
   const canSave = isDirty && (!workingIsNew || hasMeaningfulData(working));
   btn.disabled = !canSave;
   btn.classList.toggle("primary", canSave);
-  // When not dirty: show "Saglabāts." if existing record; for new empty show "Nav ierakstu..." handled elsewhere
-  if (!isDirty && !workingIsNew && currentId)   pushUpsert(structuredClone(working), baseVersion);
-setStatus("Saglabāts.", false);
-  if (isDirty) setStatus("Nesaglabātas izmaiņas — nospied SAGLABĀT.", true);
+  // Status tekstu nerakstām agresīvi katru reizi, jo to izmanto arī “Saglabāts lokāli …”.
+  // Te atjaunojam tikai tad, ja ir nesaglabātas izmaiņas.
+  if (isDirty) {
+    setStatus("Nesaglabātas izmaiņas — nospied SAGLABĀT.", true);
+  }
 }
 
 function markDirty(key){
@@ -520,7 +536,7 @@ function discardUnsavedChangesIfNeeded(){
   }
 }
 
-function saveWorking(){
+async function saveWorking(){
   if (!working) return;
 
   // no-op if should not save
@@ -553,7 +569,7 @@ function saveWorking(){
     saveAddrSystemIds();
   }
 
-  // refresh snapshot baseline after successful save
+  // refresh snapshot baseline after local save
   savedSnapshot = JSON.parse(JSON.stringify(working || {}));
 
   clearDirtyUI();
@@ -561,7 +577,17 @@ function saveWorking(){
   refreshCatalog();
   refreshMarkers();
   updateMiniMap();
-  setStatus("Saglabāts.", false);
+
+  // Svarīgi: vispirms paziņojam par lokālo saglabāšanu, sinhronizācija nāk pēc tam.
+  pendingSync = true;
+  if (dbOnline) setDbLed("pending");
+  setStatus("Saglabāts lokāli (sinhronizējas)...", false);
+
+  // mēģinām uzreiz aizsūtīt uz DB (ja sesija ir ok)
+  if (sessionOk && dbOnline){
+    const baseVersion = Number(savedSnapshot.version || 0);
+    await pushUpsert(structuredClone(savedSnapshot), baseVersion);
+  }
 }
 
 function createNewRecord(){
@@ -1188,12 +1214,7 @@ function refreshCatalog(){
   }
 }
 
-function exportJson(){
-  const box = $("exportBox");
-  box.value = JSON.stringify(objects, null, 2);
-  box.classList.remove("hidden");
-  setStatus("JSON eksports sagatavots (nokopē un saglabā).");
-}
+// Export JSON (vēsturiska funkcija) noņemts
 
 // PWA
 async function registerSW(){
@@ -1298,7 +1319,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Catalog
   $("search").addEventListener("input", refreshCatalog);
-  $("btnExport").addEventListener("click", exportJson);
+  // Export JSON noņemts
 
   // Mini map
   updateMiniMap();

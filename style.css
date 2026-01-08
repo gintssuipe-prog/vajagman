@@ -527,6 +527,7 @@ textarea.dirty, input.dirty{ border:2px solid var(--danger); }
 .dbLed.offline{background:#b91c1c;}
 .dbLed.online{background:#16a34a;}
 .dbLed.syncing{background:#f59e0b;}
+.dbLed.pending{background:#8b5cf6;}
 
 /* PIN overlay */
 .pinOverlay{position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,0.72);display:flex;align-items:center;justify-content:center;padding:20px;}
