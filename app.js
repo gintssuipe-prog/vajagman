@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.0.3";
+const APP_VERSION = "v3.0.4";
 const APP_DATE = "2026-01-08";
 
 
@@ -76,7 +76,8 @@ function hidePinOverlay(){
   if (o) o.classList.add("hidden");
 }
 async function ensureAuth(){
-  if (userLabel) { hidePinOverlay(); return true; }
+  const sessionOk = (sessionStorage.getItem(SESSION_OK_KEY) === "1");
+  if (userLabel && sessionOk) { hidePinOverlay(); return true; }
   showPinOverlay();
   const inp = document.getElementById("pinInput");
   const btn = document.getElementById("pinBtn");
@@ -91,6 +92,7 @@ async function ensureAuth(){
       if (r && r.ok){
         userLabel = String(r.user || pin);
         localStorage.setItem(STORAGE_KEY_PIN_LABEL, userLabel);
+        sessionStorage.setItem(SESSION_OK_KEY, "1");
         if (msg) msg.textContent="OK.";
         hidePinOverlay();
         await fullSync();
@@ -1199,6 +1201,51 @@ async function registerSW(){
   try { await navigator.serviceWorker.register("./service-worker.js"); } catch {}
 }
 
+// --- Session / resume handling (mobile browsers sometimes restore a "frozen" page) ---
+// We keep the USER label in localStorage, but require PIN again for each new "session".
+const SESSION_OK_KEY = "vm_session_ok";          // sessionStorage: "1" when PIN verified
+const LAST_HIDDEN_TS_KEY = "vm_last_hidden_ts";  // sessionStorage: epoch ms
+
+function clearSessionAuth_(){
+  try { sessionStorage.removeItem(SESSION_OK_KEY); } catch {}
+}
+
+function markSessionAuthOk_(){
+  try { sessionStorage.setItem(SESSION_OK_KEY, "1"); } catch {}
+}
+
+function isSessionAuthOk_(){
+  try { return sessionStorage.getItem(SESSION_OK_KEY) === "1"; } catch { return false; }
+}
+
+function initResumeGuards_(){
+  // If the page is restored from BFCache, do a clean reload (prevents "half-dead" JS state).
+  window.addEventListener("pageshow", (ev) => {
+    if (ev && ev.persisted) {
+      clearSessionAuth_();
+      try { sessionStorage.removeItem(LAST_HIDDEN_TS_KEY); } catch {}
+      // local changes are persisted in localStorage, so reload is safe.
+      window.location.reload();
+    }
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      try { sessionStorage.setItem(LAST_HIDDEN_TS_KEY, String(Date.now())); } catch {}
+      return;
+    }
+    // Visible again
+    let lastHidden = 0;
+    try { lastHidden = Number(sessionStorage.getItem(LAST_HIDDEN_TS_KEY) || 0); } catch {}
+    const awayMs = lastHidden ? (Date.now() - lastHidden) : 0;
+    // If the app was in background for a bit, re-auth and reload to avoid freezes.
+    if (awayMs > 15000) {
+      clearSessionAuth_();
+      window.location.reload();
+    }
+  });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   objects = loadObjects();
   addrSystemIds = loadAddrSystemIds();
@@ -1256,7 +1303,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // Mini map
   updateMiniMap();
 
+  // Auto-grow textareas
+  wireAutoGrow();
+
   registerSW();
+
+  // Page resume handling (Android/Chrome sometimes restores a frozen page)
+  initResumeHandling();
 
   // --- Auth + initial DB sync ---
   ensureAuth();
@@ -1290,8 +1343,42 @@ function wireAutoGrow(){
   });
 }
 
-wireAutoGrow();
+function initResumeHandling(){
+  // If the page is restored from back/forward cache, force a clean reload.
+  window.addEventListener("pageshow", (ev) => {
+    if (ev && ev.persisted) {
+      try { sessionStorage.removeItem(SESSION_OK_KEY); } catch {}
+      // We rely on localStorage for unsaved data, so reload is safe.
+      location.reload();
+    }
+  });
 
-document.addEventListener('DOMContentLoaded', ()=>{
-  if (typeof wireAutoGrow === 'function') wireAutoGrow();
-});
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      try { sessionStorage.setItem(LAST_HIDDEN_TS_KEY, String(Date.now())); } catch {}
+      return;
+    }
+
+    // When returning from background, request PIN again and reload to avoid UI freeze.
+    let last = 0;
+    try { last = Number(sessionStorage.getItem(LAST_HIDDEN_TS_KEY) || 0); } catch {}
+    const dt = last ? (Date.now() - last) : 0;
+    if (dt > 15000) {
+      try { sessionStorage.removeItem(SESSION_OK_KEY); } catch {}
+      location.reload();
+    } else {
+      // Quick alt-tab: just refresh status.
+      updateDbLed(true);
+    }
+  });
+
+  // Extra safety: on focus after a longer pause, require PIN.
+  window.addEventListener("focus", () => {
+    let last = 0;
+    try { last = Number(sessionStorage.getItem(LAST_HIDDEN_TS_KEY) || 0); } catch {}
+    if (last && (Date.now() - last) > 15000) {
+      try { sessionStorage.removeItem(SESSION_OK_KEY); } catch {}
+      // Do not reload here; visibilitychange should already have done it.
+    }
+  });
+}
