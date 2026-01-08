@@ -13,12 +13,23 @@
         crossorigin=""/>
 </head>
 <body>
+
+<div id="pinOverlay" class="pinOverlay hidden">
+  <div class="pinCard">
+    <div class="pinTitle">VAJAGMAN</div>
+    <div class="pinSub">Ievadi PIN, lai turpinātu</div>
+    <input id="pinInput" class="pinInput" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="PIN" />
+    <button id="pinBtn" class="btn primary pinBtn">IEIET</button>
+    <div id="pinMsg" class="pinMsg"></div>
+  </div>
+</div>
+
   <div class="app">
     
 <header class="hdr">
   <div class="hdr-top">
     <span class="appTitle">VAJAGMAN BETA © Gints Suipe</span>
-    <span class="appVer">v2.2.6 · 2026-01-06</span>
+    <span class="appVer"><span id="dbLed" class="dbLed offline" title="DB: offline"></span> <span id="verText">v3.0.2 · 2026-01-08</span></span>v3.0.2 · 2026-01-08</span>
   </div>
   <div class="hdr-tabs">
     <button class="tab active" data-tab="record">IERAKSTS</button>

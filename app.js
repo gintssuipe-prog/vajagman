@@ -1,18 +1,174 @@
 
-const APP_VERSION = "v2.2.9";
-const APP_DATE = "2026-01-07";
+const APP_VERSION = "v3.0.2";
+const APP_DATE = "2026-01-08";
 
 
 // UI version stamp (single source of truth)
 (function syncVersionStamp(){
-  const el = document.querySelector(".appVer");
-  if (el) el.textContent = `${APP_VERSION} · ${APP_DATE}`;
+  const t = document.getElementById("verText");
+  if (t) t.textContent = `${APP_VERSION} · ${APP_DATE}`;
 })();
 const STORAGE_KEY_OBJECTS = "vajagman_objects_v3";
 const STORAGE_KEY_CURRENT = "vajagman_current_id_v3";
 const STORAGE_KEY_AUTOMODE = "vajagman_auto_open_enabled_v3";
 const STORAGE_KEY_AUTORADIUS = "vajagman_auto_open_radius_v3";
 const STORAGE_KEY_ADDR_SYSTEM = "vajagman_addr_system_ids_v3";
+
+// --- Cloud DB (Google Apps Script WebApp) ---
+const API_BASE = "https://script.google.com/macros/s/AKfycbxgH-TStlUKfmRclynoj5u6jTO2C7Bo6T0LaYDBLbi7EKRrx0SXT3Jj9KFQkyFPzc0E/exec"; // ieliec te savu WebApp /exec linku
+const STORAGE_KEY_PIN_LABEL = "vajagman_pin_label_v1";
+const STORAGE_KEY_LASTSYNC = "vajagman_last_sync_v1";
+
+let userLabel = localStorage.getItem(STORAGE_KEY_PIN_LABEL) || "";
+let dbOnline = false;
+let dbSyncing = false;
+
+function setDbLed(state){
+  const led = document.getElementById("dbLed");
+  if (!led) return;
+  led.classList.remove("offline","online","syncing");
+  led.classList.add(state);
+  led.title = state === "online" ? "DB: sync" : (state === "syncing" ? "DB: sinhronizē..." : "DB: offline");
+}
+
+async function apiCall(action, payload){
+  if (!API_BASE) throw new Error("API_BASE nav iestatīts");
+  const res = await fetch(API_BASE, {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({action, ...payload})
+  });
+  const data = await res.json().catch(()=>null);
+  if (!res.ok) throw new Error((data && data.error) ? data.error : ("HTTP " + res.status));
+  if (!data) throw new Error("Tukša atbilde no DB");
+  return data;
+}
+
+function showPinOverlay(){
+  const o = document.getElementById("pinOverlay");
+  if (o) o.classList.remove("hidden");
+  setDbLed("offline");
+}
+function hidePinOverlay(){
+  const o = document.getElementById("pinOverlay");
+  if (o) o.classList.add("hidden");
+}
+async function ensureAuth(){
+  if (userLabel) { hidePinOverlay(); return true; }
+  showPinOverlay();
+  const inp = document.getElementById("pinInput");
+  const btn = document.getElementById("pinBtn");
+  const msg = document.getElementById("pinMsg");
+  if (inp) inp.focus();
+  const doLogin = async () => {
+    const pin = (inp?.value || "").trim();
+    if (!pin) { if (msg) msg.textContent="Ievadi PIN."; return; }
+    try{
+      if (msg) msg.textContent="Pārbaudu...";
+      const r = await apiCall("checkPin", {pin});
+      if (r && r.ok){
+        userLabel = String(r.user || pin);
+        localStorage.setItem(STORAGE_KEY_PIN_LABEL, userLabel);
+        if (msg) msg.textContent="OK.";
+        hidePinOverlay();
+        await fullSync();
+      } else {
+        if (msg) msg.textContent = (r && r.error) ? r.error : "Nederīgs PIN.";
+      }
+    }catch(e){
+      if (msg) msg.textContent = "DB nav sasniedzama.";
+      setDbLed("offline");
+    }
+  };
+  if (btn) btn.onclick = doLogin;
+  if (inp) inp.onkeydown = (e)=>{ if(e.key==="Enter") doLogin(); };
+  return false;
+}
+
+async function fullSync(){
+  if (!userLabel) return;
+  if (!API_BASE) { setDbLed("offline"); return; }
+  try{
+    dbSyncing = true; setDbLed("syncing");
+    const since = localStorage.getItem(STORAGE_KEY_LASTSYNC) || "";
+    const r = await apiCall("getAll", {since});
+    if (r && r.ok){
+      const remote = Array.isArray(r.records) ? r.records : [];
+      mergeRemote(remote);
+      localStorage.setItem(STORAGE_KEY_LASTSYNC, r.now || new Date().toISOString());
+      dbOnline = true;
+      setDbLed("online");
+      setStatus("Sinhronizēts.");
+    }
+  }catch(e){
+    dbOnline = false;
+    setDbLed("offline");
+    // nerakstām agresīvu error statusu, lai netraucē darbam offline
+  }finally{
+    dbSyncing = false;
+  }
+}
+
+function mergeRemote(remote){
+  // merge by id; remote can include isDeleted=true
+  const byId = new Map(objects.map(o=>[o.id,o]));
+  for (const ro of remote){
+    if (!ro || !ro.id) continue;
+    const lo = byId.get(ro.id);
+    if (!lo){ 
+      objects.push(ro);
+      byId.set(ro.id, ro);
+      continue;
+    }
+    // prefer newer version/updatedAt
+    const lv = Number(lo.version || 0);
+    const rv = Number(ro.version || 0);
+    const lu = String(lo.updatedAt||"");
+    const ru = String(ro.updatedAt||"");
+    const remoteIsNewer = (rv>lv) || (rv===lv && ru && ru>lu);
+    if (remoteIsNewer){
+      Object.assign(lo, ro);
+    }
+  }
+  saveObjects();
+  refreshCatalog();
+  refreshMarkers();
+}
+
+async function pushUpsert(record, baseVersion){
+  if (!userLabel || !API_BASE) return;
+  try{
+    setDbLed("syncing");
+    const r = await apiCall("save", {user:userLabel, record, baseVersion: Number(baseVersion||0)});
+    if (r && r.ok && r.record){
+      mergeRemote([r.record]);
+      setDbLed("online");
+    }
+  }catch(e){
+    setDbLed("offline");
+    // konflikts: paziņojam un atstājam lokāli
+    if (String(e.message||"").toLowerCase().includes("conflict")){
+      alert("Konflikts: kāds jau ir izmainījis šo ierakstu. Atjauno KATALOGU un mēģini vēlreiz.");
+    }
+  }
+}
+
+async function pushDelete(id, baseVersion){
+  if (!userLabel || !API_BASE) return;
+  try{
+    setDbLed("syncing");
+    const r = await apiCall("delete", {user:userLabel, id, baseVersion: Number(baseVersion||0)});
+    if (r && r.ok && r.record){
+      mergeRemote([r.record]);
+      setDbLed("online");
+    }
+  }catch(e){
+    setDbLed("offline");
+    if (String(e.message||"").toLowerCase().includes("conflict")){
+      alert("Konflikts: kāds jau ir izmainījis šo ierakstu. Atjauno KATALOGU un mēģini vēlreiz.");
+    }
+  }
+}
 const AUTO_COOLDOWN_MS = 15000;
 
 // Geocoding language control (avoid browser UI language affecting results).
@@ -222,7 +378,8 @@ function refreshSaveButton(){
   btn.disabled = !canSave;
   btn.classList.toggle("primary", canSave);
   // When not dirty: show "Saglabāts." if existing record; for new empty show "Nav ierakstu..." handled elsewhere
-  if (!isDirty && !workingIsNew && currentId) setStatus("Saglabāts.", false);
+  if (!isDirty && !workingIsNew && currentId)   pushUpsert(structuredClone(working), baseVersion);
+setStatus("Saglabāts.", false);
   if (isDirty) setStatus("Nesaglabātas izmaiņas — nospied SAGLABĀT.", true);
 }
 
@@ -300,6 +457,16 @@ function setWorking(o, isNew){
 
 function discardUnsavedChangesIfNeeded(){
   if (dirtyFields.size === 0) return;
+  // --- metadata/versioning (DB sync) ---
+  const baseVersion = Number(working.version || 0);
+  const nowIso = new Date().toISOString();
+  if (!working.createdAt) working.createdAt = nowIso;
+  if (!working.createdBy) working.createdBy = userLabel || "";
+  working.updatedAt = nowIso;
+  working.updatedBy = userLabel || "";
+  working.isDeleted = false;
+  working.version = baseVersion + 1;
+
 
   if (workingIsNew){
     // discard completely (discipline)
@@ -899,6 +1066,7 @@ function refreshCatalog(){
   const root = $("listRoot");
   const q = ($("search").value || "").toLowerCase().trim();
   const list = objects.filter(o => {
+    if (o.isDeleted) return false;
     const t = `${o.OBJEKTA_NR||""} ${o.ADRESE_LOKACIJA||""}`.toLowerCase();
     return !q || t.includes(q);
   });
@@ -961,15 +1129,23 @@ function refreshCatalog(){
     btnDel.textContent = "DZĒST";
     btnDel.onclick = () => {
       if (!confirm("Dzēst ierakstu?")) return;
-      objects = objects.filter(x => x.id !== o.id);
+      const idx = objects.findIndex(x => x.id === o.id);
+      if (idx < 0) return;
+      const baseVersion = Number(objects[idx].version || 0);
+      const nowIso = new Date().toISOString();
+      objects[idx].isDeleted = true;
+      objects[idx].updatedAt = nowIso;
+      objects[idx].updatedBy = userLabel || "";
+      objects[idx].version = baseVersion + 1;
       saveObjects();
       addrSystemIds.delete(o.id);
       saveAddrSystemIds();
-      if (currentId === o.id) currentId = objects[0]?.id ?? null;
+      if (currentId === o.id) currentId = objects.find(x=>!x.isDeleted)?.id ?? null;
       refreshCatalog();
       refreshMarkers();
       if (currentId) setWorking(structuredClone(getSavedById(currentId)), false);
       else createNewRecord();
+      pushDelete(o.id, baseVersion);
       setStatus("Dzēsts.");
     };
 
@@ -1059,6 +1235,11 @@ document.addEventListener("DOMContentLoaded", () => {
   updateMiniMap();
 
   registerSW();
+
+  // --- Auth + initial DB sync ---
+  ensureAuth();
+  // Periodiska sinhronizācija (ja lietotājs ir autorizēts)
+  setInterval(() => { if (userLabel) fullSync(); }, 30000);
 });
 
 function updateSubHeaders(){
