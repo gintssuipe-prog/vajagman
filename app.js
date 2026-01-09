@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.1.1";
+const APP_VERSION = "v3.2.0";
 const APP_DATE = "2026-01-09";
 
 
@@ -71,11 +71,15 @@ async function apiCall(action, payload){
 function showPinOverlay(){
   const o = document.getElementById("pinOverlay");
   if (o) o.classList.remove("hidden");
+  document.documentElement.classList.add("noScroll");
+  document.body.classList.add("noScroll");
   setDbLed("offline");
 }
 function hidePinOverlay(){
   const o = document.getElementById("pinOverlay");
   if (o) o.classList.add("hidden");
+  document.documentElement.classList.remove("noScroll");
+  document.body.classList.remove("noScroll");
 }
 async function ensureAuth(){
   const sessionOk = (sessionStorage.getItem(SESSION_OK_KEY) === "1");
@@ -84,7 +88,44 @@ async function ensureAuth(){
   const inp = document.getElementById("pinInput");
   const btn = document.getElementById("pinBtn");
   const msg = document.getElementById("pinMsg");
-  if (inp) inp.focus();
+  const pad = document.getElementById("pinPad");
+  const isTouch = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  if (inp){
+    inp.autocomplete = "one-time-code";
+    inp.inputMode = isTouch ? "none" : "numeric";
+    inp.readOnly = !!isTouch;
+  }
+  if (pad){
+    pad.classList.toggle("hidden", !isTouch);
+    if (isTouch && !pad.dataset.ready){
+      pad.dataset.ready = "1";
+      pad.innerHTML = "";
+      const mkBtn = (label, cls, onClick) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "pinKey" + (cls ? (" " + cls) : "");
+        b.textContent = label;
+        b.addEventListener("click", onClick);
+        return b;
+      };
+      const addDigit = (d) => {
+        const v = (inp?.value || "");
+        if (v.length >= 8) return;
+        inp.value = v + d;
+      };
+      const back = () => { inp.value = (inp.value || "").slice(0, -1); };
+      const clear = () => { inp.value = ""; };
+
+      const digits = ["1","2","3","4","5","6","7","8","9"];
+      for (const d of digits){
+        pad.appendChild(mkBtn(d, "", () => addDigit(d)));
+      }
+      pad.appendChild(mkBtn("C", "aux", clear));
+      pad.appendChild(mkBtn("0", "", () => addDigit("0")));
+      pad.appendChild(mkBtn("⌫", "aux", back));
+    }
+  }
+  if (inp && !isTouch) inp.focus();
   const doLogin = async () => {
     const pin = (inp?.value || "").trim();
     if (!pin) { if (msg) msg.textContent="Ievadi PIN."; return; }
@@ -402,6 +443,14 @@ function initRecordSubtabs(){
 function $(id){ return document.getElementById(id); }
 function setValueSafe(id, v){ const el = $(id); if (el) el.value = v; }
 function uid(){ return Math.random().toString(16).slice(2) + Date.now().toString(16); }
+
+function pad2_(n){ return String(n).padStart(2,"0"); }
+function fmtIsoLocal_(iso){
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${pad2_(d.getMonth()+1)}-${pad2_(d.getDate())} ${pad2_(d.getHours())}:${pad2_(d.getMinutes())}`;
+}
 
 function loadJson(key, fallback){
   try {
@@ -1412,6 +1461,11 @@ function refreshCatalog(){
     const t = `${o.OBJEKTA_NR||""} ${o.ADRESE_LOKACIJA||""}`.toLowerCase();
     return !q || t.includes(q);
   });
+  list.sort((a,b)=>{
+    const ta = Date.parse(a.updatedAt||a.createdAt||0) || 0;
+    const tb = Date.parse(b.updatedAt||b.createdAt||0) || 0;
+    return tb - ta;
+  });
 
   root.innerHTML = "";
   if (!list.length) {
@@ -1438,8 +1492,8 @@ function refreshCatalog(){
 
     const meta = document.createElement("div");
     meta.className = "itemMeta";
-    const c = parseLatLng(o);
-    meta.textContent = c ? `LAT/LNG: ${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}` : "LAT/LNG: nav";
+    const ts = fmtIsoLocal_(o.updatedAt || o.createdAt);
+    meta.textContent = ts ? `Pēdējā izmaiņa: ${ts}` : "";
 
     const obIt = outboxStateForId_(o.id);
     if (obIt){

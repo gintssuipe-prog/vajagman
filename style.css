@@ -236,7 +236,7 @@ body{
   padding: 10px 10px;
 }
 .itemTop{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
-.itemTitle{ font-weight: 950; text-transform: uppercase; letter-spacing: .6px; }
+.itemTitle{ font-weight: 500; text-transform: none; letter-spacing: 0; }
 .itemMeta{ margin-top: 4px; font-size: 12px; color: var(--muted); }
 .itemBtns{ display:flex; gap:8px; flex-wrap:wrap; margin-top: 10px; }
 
@@ -530,7 +530,7 @@ textarea.dirty, input.dirty{ border:2px solid var(--danger); }
 .dbLed.pending{background:#8b5cf6;}
 
 /* PIN overlay */
-.pinOverlay{position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,0.72);display:flex;align-items:center;justify-content:center;padding:20px;}
+ .pinOverlay{position:fixed;inset:0;z-index:20000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px;}
 .pinOverlay.hidden{display:none;}
 .pinCard{width:min(420px, 92vw);background:rgba(15,23,42,0.95);border:1px solid rgba(255,255,255,0.10);border-radius:18px;padding:18px 16px;box-shadow:0 10px 40px rgba(0,0,0,0.55);}
 .pinTitle{font-weight:800;letter-spacing:1px;font-size:20px;margin-bottom:6px;}
@@ -560,3 +560,35 @@ textarea.dirty, input.dirty{ border:2px solid var(--danger); }
 .localOnlyHint .warnIcon{font-size:16px; line-height:1.2;}
 .localOnlyHint .warnText{font-weight:700;}
 .localOnlyHint .warnSub{opacity:0.88; font-weight:500;}
+
+
+.noScroll{ overflow:hidden !important; touch-action:none !important; }
+
+.pinPad{
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(3, 88px);
+  gap: 14px;
+  justify-content: center;
+  align-items: center;
+}
+.pinKey{
+  width: 88px;
+  height: 88px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(11, 109, 140, 0.85);
+  color: white;
+  font-size: 26px;
+  font-weight: 700;
+}
+.pinKey:active{ transform: scale(0.98); }
+.pinKey.aux{
+  background: rgba(255,255,255,0.10);
+  font-size: 22px;
+  font-weight: 700;
+}
+@media (max-width: 420px){
+  .pinPad{ grid-template-columns: repeat(3, 76px); gap: 12px; }
+  .pinKey{ width: 76px; height: 76px; font-size: 24px; }
+}
