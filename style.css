@@ -538,3 +538,25 @@ textarea.dirty, input.dirty{ border:2px solid var(--danger); }
 .pinInput{width:100%;height:42px;border-radius:14px;border:1px solid rgba(255,255,255,0.14);background:rgba(226,232,240,0.92);padding:0 14px;font-size:16px;outline:none;}
 .pinBtn{width:100%;margin-top:10px;}
 .pinMsg{margin-top:10px;font-size:13px;color:rgba(255,255,255,0.80);min-height:18px;}
+
+
+/* Local-only / outbox indicators */
+.itemFlag{
+  margin-top:4px;
+  font-size:12px;
+  color:rgba(255,255,255,0.80);
+}
+.localOnlyHint{
+  margin:6px 0 0;
+  padding:8px 10px;
+  border-radius:10px;
+  background:rgba(255,165,0,0.12);
+  color:rgba(255,255,255,0.92);
+  font-size:13px;
+  display:flex;
+  gap:8px;
+  align-items:flex-start;
+}
+.localOnlyHint .warnIcon{font-size:16px; line-height:1.2;}
+.localOnlyHint .warnText{font-weight:700;}
+.localOnlyHint .warnSub{opacity:0.88; font-weight:500;}

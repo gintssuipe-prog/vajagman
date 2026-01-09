@@ -1,6 +1,6 @@
 
-const APP_VERSION = "v3.0.6";
-const APP_DATE = "2026-01-08";
+const APP_VERSION = "v3.1.1";
+const APP_DATE = "2026-01-09";
 
 
 // UI version stamp (single source of truth)
@@ -13,6 +13,7 @@ const STORAGE_KEY_CURRENT = "vajagman_current_id_v3";
 const STORAGE_KEY_AUTOMODE = "vajagman_auto_open_enabled_v3";
 const STORAGE_KEY_AUTORADIUS = "vajagman_auto_open_radius_v3";
 const STORAGE_KEY_ADDR_SYSTEM = "vajagman_addr_system_ids_v3";
+const STORAGE_KEY_OUTBOX = "vajagman_outbox_v3";
 
 // --- Cloud DB (Google Apps Script WebApp) ---
 const API_BASE = "https://script.google.com/macros/s/AKfycbxgH-TStlUKfmRclynoj5u6jTO2C7Bo6T0LaYDBLbi7EKRrx0SXT3Jj9KFQkyFPzc0E/exec"; // ieliec te savu WebApp /exec linku
@@ -97,6 +98,7 @@ async function ensureAuth(){
         if (msg) msg.textContent="OK.";
         hidePinOverlay();
         await fullSync();
+        await flushOutbox();
       } else {
         if (msg) msg.textContent = (r && r.error) ? r.error : "Nederīgs PIN.";
       }
@@ -124,6 +126,7 @@ async function fullSync(){
       dbOnline = true;
       setDbLed("online");
       setStatus("Sinhronizēts.");
+      await flushOutbox();
     }
   }catch(e){
     dbOnline = false;
@@ -164,36 +167,75 @@ function mergeRemote(remote){
   refreshMarkers();
 }
 
+
 async function pushUpsert(record, baseVersion){
   if (!userLabel || !API_BASE) return;
   try{
     pendingSync = true;
     setDbLed("syncing");
+
     const dbRecord = toDbRecord_(record);
-    const r = await apiCall("save", {user:userLabel, record: dbRecord, baseVersion: Number(baseVersion||0)});
+    const bv = Number(baseVersion||0);
+
+    const r = await apiCall("save", {user:userLabel, record: dbRecord, baseVersion: bv});
     if (r && r.ok && r.record){
-      mergeRemote([fromDbRecord_(r.record)]);
+      const updated = fromDbRecord_(r.record);
+      mergeRemote([updated]);
+
+      // svarīgi: atjaunojam arī current working, lai nākamais baseVersion ir pareizs
+      if (working && currentId && String(currentId)===String(updated.id)){
+        working = structuredClone(updated);
+        savedSnapshot = structuredClone(updated);
+        dirtyFields.clear();
+        refreshSaveButton();
+      }
+
       pendingSync = false;
       setDbLed("online");
-      // Ja šobrīd nav nesaglabātu izmaiņu, parādām mierīgu statusu
       if (dirtyFields.size === 0) setStatus("Saglabāts.", false);
+
+      // pēc veiksmīga upsert varam pamēģināt iztukšot outbox (ja bija rindā)
+      await flushOutbox();
+      return;
     }
-  }catch(e){
-    // paliek lokāli saglabāts; ja internets nav pieejams, rādam offline
-    pendingSync = true;
-    if (String(e.message||"").toLowerCase().includes("failed") || String(e.message||"").toLowerCase().includes("fetch")) {
-      setDbLed("offline");
-    } else {
+
+    // ja API atgrieza ne-ok, apstrādājam kā kļūdu
+    const errMsg = String((r && (r.error||r.status)) || "save failed");
+    if (errMsg.toLowerCase().includes("conflict")){
+      // konfliktu automātiski nerisinām; atstājam lokāli, outbox neliekam, lai necilātos bezjēgā
       setDbLed("pending");
-    }
-    // konflikts: paziņojam un atstājam lokāli
-    if (String(e.message||"").toLowerCase().includes("conflict")){
+      setStatus("Konflikts: atjauno KATALOGU un saskaņo izmaiņas.", false);
       alert("Konflikts: kāds jau ir izmainījis šo ierakstu. Atjauno KATALOGU un mēģini vēlreiz.");
+      return;
     }
+
+    // cits errors — liekam outbox
+    enqueueOutbox_(outboxUpsertItem_(record, bv));
+  }catch(e){
+    pendingSync = true;
+
+    const msg = String(e && e.message ? e.message : e).toLowerCase();
+
+    // tīkla kļūme => outbox
+    if (msg.includes("failed") || msg.includes("fetch") || msg.includes("network")){
+      setDbLed("offline");
+      enqueueOutbox_(outboxUpsertItem_(record, Number(baseVersion||0)));
+      return;
+    }
+
+    // konflikts (ja kļūda nāk kā exception string)
+    if (msg.includes("conflict")){
+      setDbLed("pending");
+      alert("Konflikts: kāds jau ir izmainījis šo ierakstu. Atjauno KATALOGU un mēģini vēlreiz.");
+      return;
+    }
+
+    setDbLed("pending");
   }
 }
 
 async function pushDelete(id, baseVersion){
+(id, baseVersion){
   if (!userLabel || !API_BASE) return;
   try{
     setDbLed("syncing");
@@ -204,6 +246,7 @@ async function pushDelete(id, baseVersion){
     }
   }catch(e){
     setDbLed("offline");
+    try{ enqueueOutbox_(outboxDeleteItem_(id, Number(baseVersion||0))); }catch(_e){}
     if (String(e.message||"").toLowerCase().includes("conflict")){
       alert("Konflikts: kāds jau ir izmainījis šo ierakstu. Atjauno KATALOGU un mēģini vēlreiz.");
     }
@@ -388,6 +431,193 @@ let addrSystemIds = new Set();
 
 function loadObjects(){ return Array.isArray(loadJson(STORAGE_KEY_OBJECTS, [])) ? loadJson(STORAGE_KEY_OBJECTS, []) : []; }
 function saveObjects(){ saveJson(STORAGE_KEY_OBJECTS, objects); }
+
+
+// --- Outbox (offline queue) ---
+// Glabā nesinhronizētos darbības soļus, lai pēc interneta atjaunošanās varētu automātiski iestumt DB.
+let outboxFlushing = false;
+
+function loadOutbox(){ return loadJson(STORAGE_KEY_OUTBOX, []); }
+function saveOutbox(q){ saveJson(STORAGE_KEY_OUTBOX, q); }
+
+function outboxStateForId_(id){
+  const sid = String(id||"").trim();
+  if (!sid) return null;
+  const q = loadOutbox();
+  if (!Array.isArray(q) || q.length === 0) return null;
+  // newest first
+  for (let i = q.length - 1; i >= 0; i--){
+    const it = q[i];
+    if (!it) continue;
+    if (String(it.id||"") !== sid) continue;
+    if (it.state === "pending" || it.state === "blocked") return it;
+  }
+  return null;
+}
+
+function ensureLocalOnlyHintEl_(){
+  if (document.getElementById("localOnlyHint")) return;
+  const hdr = document.querySelector(".hdr");
+  const actions = document.querySelector(".hdr-actions");
+  if (!hdr || !actions) return;
+  const box = document.createElement("div");
+  box.id = "localOnlyHint";
+  box.className = "localOnlyHint hidden";
+  box.innerHTML = '<span class="warnIcon">⚠️</span><span class="warnText">Saglabāts tikai šeit.</span><span class="warnSub">Atver un izvērtē. Pēc tam nospied “SAGLABĀT”, lai ieliktu DB (kad ir internets).</span>';
+  actions.insertAdjacentElement("afterend", box);
+}
+
+function updateLocalOnlyHint_(){
+  const box = document.getElementById("localOnlyHint");
+  if (!box) return;
+  const it = outboxStateForId_(currentId);
+  // hint only in Record tab
+  const inRecord = (currentTab === "record");
+  if (inRecord && it){
+    box.classList.remove("hidden");
+  } else {
+    box.classList.add("hidden");
+  }
+}
+
+function outboxUpsertItem_(record, baseVersion){
+  return {
+    type: "upsert",
+    id: String(record.id||""),
+    user: userLabel || "",
+    baseVersion: Number(baseVersion||0),
+    record: toDbRecord_(record),
+    ts: Date.now(),
+    tries: 0,
+    state: "pending", // pending | blocked
+    lastError: ""
+  };
+}
+
+function outboxDeleteItem_(id, baseVersion){
+  return {
+    type: "delete",
+    id: String(id||""),
+    user: userLabel || "",
+    baseVersion: Number(baseVersion||0),
+    ts: Date.now(),
+    tries: 0,
+    state: "pending",
+    lastError: ""
+  };
+}
+
+function enqueueOutbox_(item){
+  if (!item || !item.id) return;
+  const q = loadOutbox();
+
+  // Vienam ierakstam turam tikai pēdējo pending darbību (pietiekami droši mūsu darba režīmam).
+  const idx = q.findIndex(x => x && x.state==="pending" && x.type===item.type && String(x.id)===String(item.id));
+  if (idx >= 0) q[idx] = item; else q.push(item);
+
+  saveOutbox(q);
+
+  // UI indikācija: lokāli saglabāts + rindā uz DB
+  setDbLed(dbOnline ? "pending" : "offline");
+  setStatus("Saglabāts lokāli (gaida sinhronizāciju).", false);
+}
+
+function sessionOkNow_(){
+  return (sessionStorage.getItem(SESSION_OK_KEY) === "1");
+}
+
+async function flushOutbox(){
+  if (outboxFlushing) return;
+  if (!API_BASE) return;
+  if (!dbOnline) return;
+  if (!userLabel || !sessionOkNow_()) return;
+
+  const q = loadOutbox();
+  if (!Array.isArray(q) || q.length === 0) return;
+
+  outboxFlushing = true;
+  try{
+    setDbLed("syncing");
+
+    const next = [];
+    for (const item of q){
+      if (!item || item.state !== "pending") { next.push(item); continue; }
+
+      try{
+        item.tries = Number(item.tries||0) + 1;
+        if (item.type === "upsert"){
+          const r = await apiCall("save", {user:userLabel, record:item.record, baseVersion:Number(item.baseVersion||0)});
+          if (r && r.ok && r.record){
+            const updated = fromDbRecord_(r.record);
+            mergeRemote([updated]);
+
+            // ja lietotājs šobrīd rediģē to pašu ierakstu, atjaunojam version un snapshot
+            if (working && currentId && String(currentId)===String(updated.id)){
+              working = structuredClone(updated);
+              savedSnapshot = structuredClone(updated);
+              dirtyFields.clear();
+              refreshSaveButton();
+            }
+            continue; // izņemts no outbox
+          }
+          // ja nav ok - interpretējam zemāk
+          const errMsg = String((r && (r.error||r.status)) || "save failed");
+          if (errMsg.toLowerCase().includes("conflict")){
+            item.state = "blocked";
+            item.lastError = "conflict";
+            next.push(item);
+            setDbLed("pending");
+            setStatus("Saglabāts tikai šeit: DB versija atšķiras. Atver ierakstu un izvērtē, ko paturēt.", false);
+            continue;
+          }
+          item.lastError = errMsg;
+          next.push(item);
+          setDbLed("pending");
+          continue;
+        }
+
+        if (item.type === "delete"){
+          const r = await apiCall("delete", {user:userLabel, id:item.id, baseVersion:Number(item.baseVersion||0)});
+          if (r && r.ok && r.record){
+            mergeRemote([fromDbRecord_(r.record)]);
+            continue;
+          }
+          const errMsg = String((r && (r.error||r.status)) || "delete failed");
+          if (errMsg.toLowerCase().includes("conflict")){
+            item.state = "blocked";
+            item.lastError = "conflict";
+          } else {
+            item.lastError = errMsg;
+          }
+          next.push(item);
+          setDbLed("pending");
+          continue;
+        }
+
+        // nezināms tips
+        next.push(item);
+      }catch(e){
+        // tīkla/timeout gadījumā atstājam outboxā
+        item.lastError = String(e && e.message ? e.message : e);
+        next.push(item);
+        setDbLed("offline");
+      }
+    }
+
+    saveOutbox(next);
+
+    // Ja outbox tukšs un nav dirty, atgriežam zaļo
+    if (next.length === 0){
+      setDbLed("online");
+      if (dirtyFields.size === 0) setStatus("Sinhronizēts.", false);
+    } else {
+      // vēl ir darbi
+      setDbLed(dbOnline ? "pending" : "offline");
+    }
+  }finally{
+    outboxFlushing = false;
+  }
+}
 function saveCurrentId(id){ if (id) localStorage.setItem(STORAGE_KEY_CURRENT, id); }
 function loadCurrentId(){
   const id = localStorage.getItem(STORAGE_KEY_CURRENT);
@@ -551,7 +781,9 @@ function setWorking(o, isNew){
   else setStatus("Saglabāts.");
   refreshSaveButton();
   updateMiniMap();
+  updateLocalOnlyHint_();
 }
+
 
 function discardUnsavedChangesIfNeeded(){
   if (dirtyFields.size === 0) return;
@@ -1079,6 +1311,7 @@ function openRecordById(id){
   currentId = id;
   saveCurrentId(currentId);
   setWorking(structuredClone(saved), false);
+  updateLocalOnlyHint_();
   switchTab("record");
 }
 
@@ -1208,6 +1441,14 @@ function refreshCatalog(){
     const c = parseLatLng(o);
     meta.textContent = c ? `LAT/LNG: ${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}` : "LAT/LNG: nav";
 
+    const obIt = outboxStateForId_(o.id);
+    if (obIt){
+      const flag = document.createElement("div");
+      flag.className = "itemFlag";
+      flag.textContent = "⚠️ Saglabāts tikai šeit";
+      left.appendChild(flag);
+    }
+
     left.appendChild(title);
     left.appendChild(meta);
 
@@ -1333,6 +1574,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   wireHeaderActions();
   updateHdrActionBar();
+
+  // local-only hint banner
+  ensureLocalOnlyHintEl_();
+  updateLocalOnlyHint_();
 
   wireHeaderActions();
   updateHdrActionBar();
@@ -1460,5 +1705,20 @@ function initResumeHandling(){
       try { sessionStorage.removeItem(SESSION_OK_KEY); } catch {}
       // Do not reload here; visibilitychange should already have done it.
     }
-  });
+  
+
+// Online/offline triggeri: pēc interneta atjaunošanās mēģinām iestumt outbox uz DB
+window.addEventListener("online", async () => {
+  dbOnline = true;
+  setDbLed("online");
+  await flushOutbox();
+});
+window.addEventListener("offline", () => {
+  dbOnline = false;
+  setDbLed("offline");
+});
+
+// Periodiski mēģinām iztukšot outbox, ja viss ir OK (neuzbāzīgi)
+setInterval(() => { flushOutbox(); }, 45000);
+});
 }
