@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.2.4";
+const APP_VERSION = "v3.2.5";
 const APP_DATE = "2026-01-09";
 
 
@@ -246,7 +246,7 @@ async function pushUpsert(record, baseVersion){
       // konfliktu automātiski nerisinām; atstājam lokāli, outbox neliekam, lai necilātos bezjēgā
       setDbLed("pending");
       setStatus("Konflikts: atjauno KATALOGU un saskaņo izmaiņas.", false);
-      alert("Konflikts: kāds jau ir izmainījis šo ierakstu. Atjauno KATALOGU un mēģini vēlreiz.");
+      // conflict handled via outbox (blocked)
       return;
     }
 
@@ -267,7 +267,7 @@ async function pushUpsert(record, baseVersion){
     // konflikts (ja kļūda nāk kā exception string)
     if (msg.includes("conflict")){
       setDbLed("pending");
-      alert("Konflikts: kāds jau ir izmainījis šo ierakstu. Atjauno KATALOGU un mēģini vēlreiz.");
+      // conflict handled via outbox (blocked)
       return;
     }
 
@@ -277,19 +277,38 @@ async function pushUpsert(record, baseVersion){
 
 async function pushDelete(id, baseVersion){
   if (!userLabel || !API_BASE) return;
+
+  const item = outboxDeleteItem_(id, Number(baseVersion||0));
+
+  // If offline or session not verified, do not even try -> queue immediately
+  if (!dbOnline || !sessionOkNow_()){
+    enqueueOutbox_(item);
+    return;
+  }
+
   try{
     setDbLed("syncing");
     const r = await apiCall("delete", {user:userLabel, id, baseVersion: Number(baseVersion||0)});
     if (r && r.ok && r.record){
       mergeRemote([fromDbRecord_(r.record)]);
       setDbLed("online");
+      return;
     }
+
+    const errMsg = String((r && (r.error||r.status)) || "delete failed");
+    if (errMsg.toLowerCase().includes("conflict")){
+      item.state = "blocked";
+      item.lastError = "conflict";
+      saveOutbox([...loadOutbox(), item]);
+      setDbLed("pending");
+      return;
+    }
+
+    // other errors -> queue for retry
+    enqueueOutbox_(item);
   }catch(e){
     setDbLed("offline");
-    try{ enqueueOutbox_(outboxDeleteItem_(id, Number(baseVersion||0))); }catch(_e){}
-    if (String(e.message||"").toLowerCase().includes("conflict")){
-      alert("Konflikts: kāds jau ir izmainījis šo ierakstu. Atjauno KATALOGU un mēģini vēlreiz.");
-    }
+    enqueueOutbox_(item);
   }
 }
 const AUTO_COOLDOWN_MS = 15000;
@@ -537,10 +556,32 @@ function outboxDeleteItem_(id, baseVersion){
 function enqueueOutbox_(item){
   if (!item || !item.id) return;
   const q = loadOutbox();
+  const id = String(item.id);
 
-  // Vienam ierakstam turam tikai pēdējo pending darbību (pietiekami droši mūsu darba režīmam).
-  const idx = q.findIndex(x => x && x.state==="pending" && x.type===item.type && String(x.id)===String(item.id));
-  if (idx >= 0) q[idx] = item; else q.push(item);
+  // Dedupe / precedence rules:
+  // - DELETE overrides any pending work for the same id (drop older UPSERTs)
+  // - UPSERT after DELETE means "undo delete" locally -> drop pending DELETE
+  if (item.type === "delete"){
+    for (let i = q.length - 1; i >= 0; i--){
+      const x = q[i];
+      if (!x) continue;
+      if (x.state === "pending" && String(x.id) === id){
+        q.splice(i, 1);
+      }
+    }
+    q.push(item);
+  } else {
+    // upsert
+    for (let i = q.length - 1; i >= 0; i--){
+      const x = q[i];
+      if (!x) continue;
+      if (x.state === "pending" && x.type === "delete" && String(x.id) === id){
+        q.splice(i, 1); // undo pending delete
+      }
+    }
+    const idx = q.findIndex(x => x && x.state==="pending" && x.type==="upsert" && String(x.id)===id);
+    if (idx >= 0) q[idx] = item; else q.push(item);
+  }
 
   saveOutbox(q);
 
