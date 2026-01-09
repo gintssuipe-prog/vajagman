@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.3.0";
+const APP_VERSION = "v3.2.11";
 const APP_DATE = "2026-01-09";
 
 
@@ -7,136 +7,7 @@ const APP_DATE = "2026-01-09";
 (function syncVersionStamp(){
   const t = document.getElementById("verText");
   if (t) t.textContent = `${APP_VERSION} · ${APP_DATE}`;
-})()
-// =====================
-// ADMIN DIAGNOSTIKA (5× uz versijas) — v3.3.0
-// =====================
-let __diagTapCount = 0;
-let __diagTapTimer = null;
-
-function initDiagnostics_(){
-  const verEl = document.getElementById("verText");
-  if (!verEl) return;
-
-  verEl.addEventListener("click", () => {
-    __diagTapCount++;
-    clearTimeout(__diagTapTimer);
-
-    if (__diagTapCount >= 5) {
-      __diagTapCount = 0;
-      openDiagnostics_();
-      return;
-    }
-    __diagTapTimer = setTimeout(() => { __diagTapCount = 0; }, 1200);
-  });
-}
-
-function openDiagnostics_(){
-  closeDiagnostics_();
-
-  const outbox = loadOutbox();
-  const pending = outbox.filter(o => o && o.status === "pending").length;
-  const blocked = outbox.filter(o => o && o.status === "blocked").length;
-
-  const ledEl = document.getElementById("dbLed");
-  const ledState =
-    ledEl?.classList.contains("online") ? "🟢" :
-    ledEl?.classList.contains("offline") ? "🔴" :
-    ledEl?.classList.contains("pending") ? "🟡" :
-    ledEl?.classList.contains("local") ? "🟣" :
-    "—";
-
-  const lastSync = localStorage.getItem(STORAGE_KEY_LASTSYNC) || "—";
-  const objCount = Array.isArray(objects) ? objects.length : 0;
-
-  const wrap = document.createElement("div");
-  wrap.id = "diagOverlay";
-  wrap.style.position = "fixed";
-  wrap.style.inset = "0";
-  wrap.style.zIndex = "99999";
-  wrap.style.background = "rgba(0,0,0,0.55)";
-  wrap.style.display = "flex";
-  wrap.style.alignItems = "center";
-  wrap.style.justifyContent = "center";
-  wrap.style.padding = "16px";
-
-  const box = document.createElement("div");
-  box.style.width = "min(520px, 100%)";
-  box.style.background = "#0b2a3f";
-  box.style.color = "#fff";
-  box.style.borderRadius = "14px";
-  box.style.boxShadow = "0 10px 30px rgba(0,0,0,0.35)";
-  box.style.padding = "14px";
-
-  box.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-      <div style="font-weight:700;">Sistēmas diagnostika</div>
-      <button id="diagCloseBtn" style="background:#1f2937;color:#fff;border:0;border-radius:10px;padding:8px 10px;">Aizvērt</button>
-    </div>
-
-    <div style="margin-top:10px;background:rgba(255,255,255,0.06);border-radius:12px;padding:10px;font-size:13px;line-height:1.45;white-space:pre-wrap;">
-Versija: ${APP_VERSION} · ${APP_DATE}
-LED: ${ledState}
-Online (navigator): ${navigator.onLine ? "JĀ" : "NĒ"}
-DB online (iekšēji): ${dbOnline ? "JĀ" : "NĒ"}
-PIN lietotājs: ${userLabel || "—"}
-Objekti lokāli: ${objCount}
-Outbox kopā: ${outbox.length}
-  pending: ${pending}
-  blocked: ${blocked}
-Pēdējais sync: ${lastSync}
-    </div>
-
-    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;">
-      <button id="diagClearOutbox" style="flex:1;min-width:150px;background:#f59e0b;color:#111827;border:0;border-radius:12px;padding:10px 12px;font-weight:700;">Iztīrīt OUTBOX</button>
-      <button id="diagClearCache" style="flex:1;min-width:150px;background:#ef4444;color:#fff;border:0;border-radius:12px;padding:10px 12px;font-weight:700;">Iztīrīt kešu</button>
-      <button id="diagReload" style="flex:1;min-width:150px;background:#22c55e;color:#052e16;border:0;border-radius:12px;padding:10px 12px;font-weight:700;">Restartēt</button>
-    </div>
-
-    <div style="margin-top:10px;font-size:12px;opacity:0.85;">
-      <div><b>Iztīrīt OUTBOX</b> – dzēš tikai lokālās neapstiprinātās darbības (DB neaiztiek).</div>
-      <div><b>Iztīrīt kešu</b> – dzēš lokālos objektus + outbox šajā ierīcē (DB neaiztiek).</div>
-    </div>
-  `;
-
-  wrap.appendChild(box);
-  document.body.appendChild(wrap);
-  document.body.style.overflow = "hidden";
-
-  wrap.addEventListener("click", (e) => {
-    if (e.target === wrap) closeDiagnostics_();
-  });
-
-  box.querySelector("#diagCloseBtn")?.addEventListener("click", closeDiagnostics_);
-  box.querySelector("#diagReload")?.addEventListener("click", () => location.reload());
-
-  box.querySelector("#diagClearOutbox")?.addEventListener("click", () => {
-    if (!confirm("Dzēst lokālās neapstiprinātās darbības (OUTBOX)?")) return;
-    localStorage.removeItem(STORAGE_KEY_OUTBOX);
-    alert("Outbox iztīrīts.");
-    location.reload();
-  });
-
-  box.querySelector("#diagClearCache")?.addEventListener("click", () => {
-    if (!confirm("DZĒST lokālos datus šajā ierīcē? DB netiks ietekmēta.")) return;
-    localStorage.removeItem(STORAGE_KEY_OBJECTS);
-    localStorage.removeItem(STORAGE_KEY_CURRENT);
-    localStorage.removeItem(STORAGE_KEY_ADDR_SYSTEM);
-    localStorage.removeItem(STORAGE_KEY_AUTOMODE);
-    localStorage.removeItem(STORAGE_KEY_AUTORADIUS);
-    localStorage.removeItem(STORAGE_KEY_OUTBOX);
-    localStorage.removeItem(STORAGE_KEY_LASTSYNC);
-    alert("Lokālais kešs iztīrīts.");
-    location.reload();
-  });
-}
-
-function closeDiagnostics_(){
-  const el = document.getElementById("diagOverlay");
-  if (el) el.remove();
-  document.body.style.overflow = "";
-}
-;
+})();
 const STORAGE_KEY_OBJECTS = "vajagman_objects_v3";
 const STORAGE_KEY_CURRENT = "vajagman_current_id_v3";
 const STORAGE_KEY_AUTOMODE = "vajagman_auto_open_enabled_v3";
@@ -304,7 +175,34 @@ async function fullSync(){
     const r = await apiCall("getAll", {since});
     if (r && r.ok){
       const remote = Array.isArray(r.records) ? r.records : [];
-      mergeRemote(remote.map(fromDbRecord_));
+      const remoteObjs = remote.map(fromDbRecord_);
+
+      // DB ir galvenā: ja ieraksts pazudis DB, tas pazūd arī lokāli (izņemot, ja ir pending/outbox).
+      try{
+        const remoteIds = new Set(remoteObjs.map(x => String(x.id||"").trim()).filter(Boolean));
+        const q = loadOutbox();
+        const hasOutbox = (id) => {
+          const sid = String(id||"").trim();
+          return q.some(it => it && String(it.id||"").trim() === sid);
+        };
+        const before = objects.slice();
+        objects = objects.filter(o => {
+          const id = String(o && o.id || "").trim();
+          const v = Number(o && o.version || 0);
+          if (v >= 1 && id && !remoteIds.has(id) && !hasOutbox(id)) {
+            // remove also from special marker set
+            addrSystemIds.delete(id);
+            return false;
+          }
+          return true;
+        });
+        if (objects.length !== before.length) {
+          saveObjects();
+          saveAddrSystemIds();
+        }
+      }catch(e){ /* never block sync */ }
+
+      mergeRemote(remoteObjs);
       localStorage.setItem(STORAGE_KEY_LASTSYNC, r.now || new Date().toISOString());
       dbOnline = true;
       setDbLed("online");
@@ -321,6 +219,9 @@ async function fullSync(){
     if (!dbOnline) setDbLed("offline");
     else if (pendingSync) setDbLed("pending");
     else setDbLed("online");
+    // Pēc sync atjaunojam KATALOGU/MARĶIERUS arī tad, ja DB atgriezās tukša (DB wipe).
+    refreshCatalog();
+    refreshMarkers();
   }
 }
 
@@ -1859,8 +1760,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   wireHeaderActions();
   updateHdrActionBar();
-  initDiagnostics_();
-
 
 
   wireHeaderActions();
