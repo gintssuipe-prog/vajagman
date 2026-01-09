@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.2.2";
+const APP_VERSION = "v3.2.3";
 const APP_DATE = "2026-01-09";
 
 
@@ -461,6 +461,9 @@ function loadJson(key, fallback){
 function saveJson(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
 
 function setStatus(msg, dirty=false){
+  // Galvenajā joslā nerādām tehniskos sinhronizācijas paziņojumus (tie dzīvo KATALOGĀ pie brāķiem).
+  const s = String(msg || "");
+  if (/^Saglabāts/i.test(s) || s.toLowerCase().includes("sinhroniz")) return;
   const el = $("status");
   if (!el) return;
   el.textContent = msg;
@@ -516,16 +519,10 @@ function ensureLocalOnlyHintEl_(){
 }
 
 function updateLocalOnlyHint_(){
+  // Nerādām paziņojumus pašā ierakstā; tos redz KATALOGĀ pie brāķiem.
   const box = document.getElementById("localOnlyHint");
   if (!box) return;
-  const it = outboxStateForId_(currentId);
-  // hint only in Record tab
-  const inRecord = (activeTab === "record");
-  if (inRecord && it){
-    box.classList.remove("hidden");
-  } else {
-    box.classList.add("hidden");
-  }
+  box.classList.add("hidden");
 }
 
 function outboxUpsertItem_(record, baseVersion){
