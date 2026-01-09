@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.2.8";
+const APP_VERSION = "v3.2.9";
 const APP_DATE = "2026-01-09";
 
 
@@ -24,6 +24,19 @@ let userLabel = localStorage.getItem(STORAGE_KEY_PIN_LABEL) || "";
 let dbOnline = false;
 let dbSyncing = false;
 let pendingSync = false; // saglabāts lokāli, bet vēl nav apstiprināts no servera
+
+// Catalog render stability (avoid empty flicker during sync)
+let lastCatalogHtml_ = '';
+let lastCatalogHasItems_ = false;
+function isSyncBusy_(){ return !!(dbSyncing || outboxFlushing); }
+
+
+
+
+
+
+
+
 
 function setDbLed(state){
   const led = document.getElementById("dbLed");
@@ -185,10 +198,8 @@ async function fullSync(){
 function mergeRemote(remote){
   // merge by id; remote can include isDeleted=true
   const byId = new Map(objects.map(o=>[o.id,o]));
-  const remoteIds = new Set();
   for (const ro of remote){
     if (!ro || !ro.id) continue;
-    if (!ro.isDeleted) remoteIds.add(ro.id);
     const lo = byId.get(ro.id);
     if (!lo){ 
       objects.push(ro);
@@ -205,43 +216,6 @@ function mergeRemote(remote){
       Object.assign(lo, ro);
     }
   }
-  
-  // DB is source of truth: if a record previously existed in DB (version>=1)
-  // but is missing from the latest remote snapshot, remove it locally
-  // unless the user has unsynced local changes (outbox or currently editing dirty).
-  const removedIds = [];
-  const nextObjects = [];
-  for (const o of objects){
-    if (!o || !o.id) continue;
-    if (o.isDeleted){
-      nextObjects.push(o);
-      continue;
-    }
-    const v = Number(o.version || 0);
-    if (v >= 1 && !remoteIds.has(o.id)){
-      const ob = outboxStateForId_(o.id); // pending/blocked means local changes exist
-      const isEditingDirty = (working && String(working.id) === String(o.id) && dirtyFields && dirtyFields.size > 0);
-      if (ob || isEditingDirty){
-        // keep locally, user must resolve
-        nextObjects.push(o);
-      } else {
-        removedIds.push(o.id);
-      }
-      continue;
-    }
-    nextObjects.push(o);
-  }
-  if (removedIds.length){
-    objects = nextObjects;
-    // If current record was removed, return user to catalog safely
-    if (currentId && removedIds.includes(String(currentId))){
-      currentId = null;
-      working = null;
-      workingIsNew = false;
-      dirtyFields.clear();
-    }
-  }
-
   saveObjects();
   refreshCatalog();
   refreshMarkers();
@@ -1026,6 +1000,13 @@ function createNewRecord(){
 }
 
 function buildForm(root, obj){
+
+  // Avoid empty flicker during short sync windows: if list is temporarily empty while syncing, keep the last visible list.
+  const syncingNow = isSyncBusy_();
+  if (!list.length && syncingNow && lastCatalogHasItems_ && root.children.length > 0) {
+    return;
+  }
+
   root.innerHTML = "";
 
   for (const f of schema){
@@ -1546,10 +1527,21 @@ function refreshCatalog(){
     return !q || t.includes(q);
   });
   list.sort((a,b)=>{
-    const ta = Date.parse(a.updatedAt||a.createdAt||0) || 0;
-    const tb = Date.parse(b.updatedAt||b.createdAt||0) || 0;
+    const ta = Date.parse(a.updatedAt||a.createdAt||'') || 0;
+    const tb = Date.parse(b.updatedAt||b.createdAt||'') || 0;
+    const hasA = ta > 0;
+    const hasB = tb > 0;
+    // Vispirms rādam tos, kam NAV datuma (lokālie / nesinhronizētie)
+    if (hasA != hasB) return hasA ? 1 : -1;
+    // Pēc tam tos, kam ir datumi (vissvaigākie augšā)
     return tb - ta;
   });
+
+  // Avoid empty flicker during short sync windows: if list is temporarily empty while syncing, keep the last visible list.
+  const syncingNow = isSyncBusy_();
+  if (!list.length && syncingNow && lastCatalogHasItems_ && root.children.length > 0) {
+    return;
+  }
 
   root.innerHTML = "";
   if (!list.length) {
@@ -1557,6 +1549,8 @@ function refreshCatalog(){
     empty.className = "item";
     empty.innerHTML = `<div class="itemTitle">Nav ierakstu</div><div class="itemMeta">IERAKSTS → JAUNS → SAGLABĀT.</div>`;
     root.appendChild(empty);
+    lastCatalogHasItems_ = false;
+    lastCatalogHtml_ = root.innerHTML;
     return;
   }
 
@@ -1582,30 +1576,28 @@ function refreshCatalog(){
     const obIt = outboxStateForId_(o.id);
     const isLocalOnly = !!obIt || !ts || Number(o.version || 0) <= 0;
     if (isLocalOnly){
-      let reason = "";
-      if (obIt && obIt.state === "blocked") reason = "jāpārskata";
-      else if (!dbOnline) reason = "nav interneta";
-      else if (!sessionOkNow_()) reason = "jāielogojas";
-      else if (obIt) reason = "gaida DB";
-      const flag = document.createElement("div");
-      flag.className = "itemFlag";
-      flag.textContent = reason ? `⚠️ Saglabāts tikai šeit — ${reason}` : "⚠️ Saglabāts tikai šeit";
+      const flag = document.createElement('div');
+      flag.className = 'itemFlag';
+      let reason = '';
+      if (!dbOnline) reason = 'nav interneta';
+      else if (!sessionOkNow_()) reason = 'jāielogojas';
+      else if (obIt && (obIt.state === 'blocked' || obIt.lastError)) reason = 'jāpārskata';
+      flag.textContent = reason ? (`⚠️ Saglabāts tikai šeit — ${reason}`) : '⚠️ Saglabāts tikai šeit';
       left.appendChild(flag);
     }
 
     left.appendChild(title);
     left.appendChild(meta);
 
+    top.appendChild(left);
+
+    const btns = document.createElement("div");
+    btns.className = "itemBtns";
+
     const btnOpen = document.createElement("button");
     btnOpen.className = "btn primary";
     btnOpen.textContent = "ATVĒRT";
     btnOpen.onclick = () => openRecordById(o.id);
-
-    top.appendChild(left);
-    top.appendChild(btnOpen);
-
-    const btns = document.createElement("div");
-    btns.className = "itemBtns";
 
     const btnMap = document.createElement("button");
     btnMap.className = "btn";
@@ -1663,6 +1655,7 @@ function refreshCatalog(){
       setStatus("Dzēsts.");
     };
 
+    btns.appendChild(btnOpen);
     btns.appendChild(btnMap);
     btns.appendChild(btnDel);
 
@@ -1676,7 +1669,12 @@ function refreshCatalog(){
 
     root.appendChild(el);
   }
+
+  // cache last render for UI stability
+  lastCatalogHasItems_ = list.length > 0;
+  lastCatalogHtml_ = root.innerHTML;
 }
+
 
 // Export JSON (vēsturiska funkcija) noņemts
 
