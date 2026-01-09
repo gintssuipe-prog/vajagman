@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.2.9";
+const APP_VERSION = "v3.2.10";
 const APP_DATE = "2026-01-09";
 
 
@@ -1000,12 +1000,6 @@ function createNewRecord(){
 }
 
 function buildForm(root, obj){
-
-  // Avoid empty flicker during short sync windows: if list is temporarily empty while syncing, keep the last visible list.
-  const syncingNow = isSyncBusy_();
-  if (!list.length && syncingNow && lastCatalogHasItems_ && root.children.length > 0) {
-    return;
-  }
 
   root.innerHTML = "";
 
