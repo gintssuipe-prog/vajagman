@@ -100,7 +100,7 @@ body{
   border-radius: 18px;
   padding: 10px;
 }
-.hidden{ display:none; }
+.hidden{ display:none !important; }
 
 .btn{
   border:1px solid rgba(255,255,255,0.12);

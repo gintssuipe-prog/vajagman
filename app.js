@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.2.3";
+const APP_VERSION = "v3.2.4";
 const APP_DATE = "2026-01-09";
 
 
@@ -506,24 +506,6 @@ function outboxStateForId_(id){
   return null;
 }
 
-function ensureLocalOnlyHintEl_(){
-  if (document.getElementById("localOnlyHint")) return;
-  const hdr = document.querySelector(".hdr");
-  const actions = document.querySelector(".hdr-actions");
-  if (!hdr || !actions) return;
-  const box = document.createElement("div");
-  box.id = "localOnlyHint";
-  box.className = "localOnlyHint hidden";
-  box.innerHTML = '<span class="warnIcon">⚠️</span><span class="warnText">Saglabāts tikai šeit.</span><span class="warnSub">Atver un izvērtē. Pēc tam nospied “SAGLABĀT”, lai ieliktu DB (kad ir internets).</span>';
-  actions.insertAdjacentElement("afterend", box);
-}
-
-function updateLocalOnlyHint_(){
-  // Nerādām paziņojumus pašā ierakstā; tos redz KATALOGĀ pie brāķiem.
-  const box = document.getElementById("localOnlyHint");
-  if (!box) return;
-  box.classList.add("hidden");
-}
 
 function outboxUpsertItem_(record, baseVersion){
   return {
@@ -753,6 +735,10 @@ function refreshSaveButton(){
   // Te atjaunojam tikai tad, ja ir nesaglabātas izmaiņas.
   if (isDirty) {
     setStatus("Nesaglabātas izmaiņas — nospied SAGLABĀT.", true);
+  } else {
+    // Ja nav nesaglabātu izmaiņu, neturam iepriekšējo “dirty” statusu.
+    // (Tehniskus sync paziņojumus rādam tikai KATALOGĀ.)
+    setStatus("Gatavs.", false);
   }
 }
 
@@ -1625,9 +1611,6 @@ document.addEventListener("DOMContentLoaded", () => {
   wireHeaderActions();
   updateHdrActionBar();
 
-  // local-only hint banner
-  ensureLocalOnlyHintEl_();
-  updateLocalOnlyHint_();
 
   wireHeaderActions();
   updateHdrActionBar();
