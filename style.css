@@ -100,7 +100,7 @@ body{
   border-radius: 18px;
   padding: 10px;
 }
-.hidden{ display:none !important; }
+.hidden{ display:none !important;!important; }
 
 .btn{
   border:1px solid rgba(255,255,255,0.12);
@@ -531,7 +531,7 @@ textarea.dirty, input.dirty{ border:2px solid var(--danger); }
 
 /* PIN overlay */
  .pinOverlay{position:fixed;inset:0;z-index:20000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px;}
-.pinOverlay.hidden{display:none;}
+.pinOverlay.hidden{display:none !important;}
 .pinCard{width:min(420px, 92vw);background:rgba(15,23,42,0.95);border:1px solid rgba(255,255,255,0.10);border-radius:18px;padding:18px 16px;box-shadow:0 10px 40px rgba(0,0,0,0.55);}
 .pinTitle{font-weight:800;letter-spacing:1px;font-size:20px;margin-bottom:6px;}
 .pinSub{color:rgba(255,255,255,0.75);font-size:13px;margin-bottom:12px;}

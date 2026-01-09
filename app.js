@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.2.5";
+const APP_VERSION = "v3.2.6";
 const APP_DATE = "2026-01-09";
 
 
@@ -781,6 +781,16 @@ function refreshSaveButton(){
     // (Tehniskus sync paziņojumus rādam tikai KATALOGĀ.)
     setStatus("Gatavs.", false);
   }
+}
+
+function updateLocalOnlyHint_(){
+  // We show "⚠️ Saglabāts tikai šeit" only in KATALOGS list items.
+  // In record view we keep UI clean: hide the banner if it exists.
+  const el = document.getElementById("localOnlyHint");
+  if (el) el.classList.add("hidden");
+
+  // Also ensure header/status text is not left in a confusing state.
+  // (Actual status logic lives elsewhere; this is a safety no-op.)
 }
 
 function markDirty(key){
