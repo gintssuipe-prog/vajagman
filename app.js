@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.2.6";
+const APP_VERSION = "v3.2.7";
 const APP_DATE = "2026-01-09";
 
 
@@ -525,6 +525,15 @@ function outboxStateForId_(id){
   return null;
 }
 
+function removeOutboxForId_(id){
+  const sid = String(id||"").trim();
+  if (!sid) return;
+  const q = loadOutbox();
+  if (!Array.isArray(q) || q.length === 0) return;
+  const next = q.filter(it => it && String(it.id||"") !== sid);
+  if (next.length !== q.length) saveOutbox(next);
+}
+
 
 function outboxUpsertItem_(record, baseVersion){
   return {
@@ -686,7 +695,10 @@ async function flushOutbox(){
     outboxFlushing = false;
   }
 }
-function saveCurrentId(id){ if (id) localStorage.setItem(STORAGE_KEY_CURRENT, id); }
+function saveCurrentId(id){
+  if (id) localStorage.setItem(STORAGE_KEY_CURRENT, id);
+  else localStorage.removeItem(STORAGE_KEY_CURRENT);
+}
 function loadCurrentId(){
   const id = localStorage.getItem(STORAGE_KEY_CURRENT);
   if (id && objects.some(o => o.id === id)) return id;
@@ -1529,7 +1541,8 @@ function refreshCatalog(){
     meta.textContent = ts ? `Pēdējā izmaiņa: ${ts}` : "";
 
     const obIt = outboxStateForId_(o.id);
-    if (obIt){
+    const isLocalOnly = !!obIt || !ts || Number(o.version || 0) <= 0;
+    if (isLocalOnly){
       const flag = document.createElement("div");
       flag.className = "itemFlag";
       flag.textContent = "⚠️ Saglabāts tikai šeit";
@@ -1569,6 +1582,26 @@ function refreshCatalog(){
       const idx = objects.findIndex(x => x.id === o.id);
       if (idx < 0) return;
       const baseVersion = Number(objects[idx].version || 0);
+
+      // Ja ieraksts vēl nav DB (version=0), tad DZĒST nozīmē: izdzēst tikai lokāli.
+      if (baseVersion <= 0){
+        objects.splice(idx, 1);
+        saveObjects();
+        removeOutboxForId_(o.id);
+        addrSystemIds.delete(o.id);
+        saveAddrSystemIds();
+        if (currentId === o.id) {
+          currentId = objects.find(x => !x.isDeleted)?.id ?? null;
+          saveCurrentId(currentId);
+        }
+        refreshCatalog();
+        refreshMarkers();
+        if (currentId) setWorking(structuredClone(getSavedById(currentId)), false);
+        else createNewRecord();
+        setStatus("Izdzēsts lokāli.");
+        return;
+      }
+
       const nowIso = new Date().toISOString();
       objects[idx].isDeleted = true;
       objects[idx].updatedAt = nowIso;
