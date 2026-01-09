@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.2.1";
+const APP_VERSION = "v3.2.2";
 const APP_DATE = "2026-01-09";
 
 
@@ -520,7 +520,7 @@ function updateLocalOnlyHint_(){
   if (!box) return;
   const it = outboxStateForId_(currentId);
   // hint only in Record tab
-  const inRecord = (currentTab === "record");
+  const inRecord = (activeTab === "record");
   if (inRecord && it){
     box.classList.remove("hidden");
   } else {
