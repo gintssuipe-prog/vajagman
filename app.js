@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.2.0";
+const APP_VERSION = "v3.2.1";
 const APP_DATE = "2026-01-09";
 
 
@@ -276,7 +276,6 @@ async function pushUpsert(record, baseVersion){
 }
 
 async function pushDelete(id, baseVersion){
-(id, baseVersion){
   if (!userLabel || !API_BASE) return;
   try{
     setDbLed("syncing");
