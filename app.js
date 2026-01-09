@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.2.7";
+const APP_VERSION = "v3.2.8";
 const APP_DATE = "2026-01-09";
 
 
@@ -185,8 +185,10 @@ async function fullSync(){
 function mergeRemote(remote){
   // merge by id; remote can include isDeleted=true
   const byId = new Map(objects.map(o=>[o.id,o]));
+  const remoteIds = new Set();
   for (const ro of remote){
     if (!ro || !ro.id) continue;
+    if (!ro.isDeleted) remoteIds.add(ro.id);
     const lo = byId.get(ro.id);
     if (!lo){ 
       objects.push(ro);
@@ -203,6 +205,43 @@ function mergeRemote(remote){
       Object.assign(lo, ro);
     }
   }
+  
+  // DB is source of truth: if a record previously existed in DB (version>=1)
+  // but is missing from the latest remote snapshot, remove it locally
+  // unless the user has unsynced local changes (outbox or currently editing dirty).
+  const removedIds = [];
+  const nextObjects = [];
+  for (const o of objects){
+    if (!o || !o.id) continue;
+    if (o.isDeleted){
+      nextObjects.push(o);
+      continue;
+    }
+    const v = Number(o.version || 0);
+    if (v >= 1 && !remoteIds.has(o.id)){
+      const ob = outboxStateForId_(o.id); // pending/blocked means local changes exist
+      const isEditingDirty = (working && String(working.id) === String(o.id) && dirtyFields && dirtyFields.size > 0);
+      if (ob || isEditingDirty){
+        // keep locally, user must resolve
+        nextObjects.push(o);
+      } else {
+        removedIds.push(o.id);
+      }
+      continue;
+    }
+    nextObjects.push(o);
+  }
+  if (removedIds.length){
+    objects = nextObjects;
+    // If current record was removed, return user to catalog safely
+    if (currentId && removedIds.includes(String(currentId))){
+      currentId = null;
+      working = null;
+      workingIsNew = false;
+      dirtyFields.clear();
+    }
+  }
+
   saveObjects();
   refreshCatalog();
   refreshMarkers();
@@ -1543,9 +1582,14 @@ function refreshCatalog(){
     const obIt = outboxStateForId_(o.id);
     const isLocalOnly = !!obIt || !ts || Number(o.version || 0) <= 0;
     if (isLocalOnly){
+      let reason = "";
+      if (obIt && obIt.state === "blocked") reason = "jāpārskata";
+      else if (!dbOnline) reason = "nav interneta";
+      else if (!sessionOkNow_()) reason = "jāielogojas";
+      else if (obIt) reason = "gaida DB";
       const flag = document.createElement("div");
       flag.className = "itemFlag";
-      flag.textContent = "⚠️ Saglabāts tikai šeit";
+      flag.textContent = reason ? `⚠️ Saglabāts tikai šeit — ${reason}` : "⚠️ Saglabāts tikai šeit";
       left.appendChild(flag);
     }
 
