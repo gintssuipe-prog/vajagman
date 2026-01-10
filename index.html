@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>VAJAGMAN</title>
+    <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="./favicon.ico">
   <link rel="manifest" href="./manifest.webmanifest">
   <meta name="theme-color" content="#0f172a">
@@ -47,8 +48,7 @@
       <div class="hdr-actions">
         <div class="hdr-actions-left">
           <button id="btnValidateAddress" class="btn warn">VALIDĒT</button>
-          <button id="btnGps" class="btn warn">GPS</button>
-        </div>
+</div>
         <div class="hdr-actions-right">
           <button id="btnSave" class="btn">SAGLABĀT</button>
           <button id="btnNew" class="btn success">JAUNS</button>
@@ -62,12 +62,13 @@
         <div class="hdr-map-left">
           <button id="btnCenterMe" class="btn">MANA LOKĀCIJA</button>
           <button id="btnFindNearest" class="btn primary">TUVĀKAIS</button>
+          <button id="btnGps" class="btn warn">GPS</button>
         </div>
         <label class="hdr-map-auto" for="autoOpenToggle">
           <input type="checkbox" id="autoOpenToggle" />
-          <span>Automātiski vērt vaļā IERAKSTU, kas atrodas ≤</span>
+          <span>AUTO uz IERAKSTS &lt;</span>
           <input id="autoRadius" class="radius" type="number" min="20" step="10" value="80" />
-          <span>m attālumā</span>
+          <span>m</span>
         </label>
       </div>
     </div>

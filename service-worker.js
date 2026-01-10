@@ -1,11 +1,13 @@
-const CACHE_NAME = "vajagman-v3.2.13-2026-01-09";
+const CACHE_NAME = "vajagman-v3.2.14-2026-01-09";
 const ASSETS = [
   "./",
   "./index.html",
   "./style.css",
   "./app.js",
   "./manifest.webmanifest",
-  "./favicon.ico"
+  "./favicon.ico",
+  "./icon-192.png",
+  "./icon-512.png"
 ];
 
 self.addEventListener("install", (event) => {
