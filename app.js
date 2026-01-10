@@ -1,6 +1,6 @@
 
-const APP_VERSION = "v3.2.14";
-const APP_DATE = "2026-01-09";
+const APP_VERSION = "v3.2.16";
+const APP_DATE = "2026-01-10";
 
 
 // UI version stamp (single source of truth)
@@ -8,6 +8,122 @@ const APP_DATE = "2026-01-09";
   const t = document.getElementById("verText");
   if (t) t.textContent = `${APP_VERSION} · ${APP_DATE}`;
 })();
+
+
+// Add to Home Screen (5 taps on title)
+let __a2hsTapCount = 0;
+let __a2hsTapTimer = null;
+let __deferredInstallPrompt = null;
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  // Chrome/Edge (Android/Windows) will fire this when installable
+  e.preventDefault();
+  __deferredInstallPrompt = e;
+});
+
+function initAddToHomeScreen_(){
+  const titleEl = document.getElementById("appTitleTap");
+  if (!titleEl) return;
+
+  titleEl.addEventListener("click", () => {
+    __a2hsTapCount++;
+    clearTimeout(__a2hsTapTimer);
+
+    if (__a2hsTapCount >= 5) {
+      __a2hsTapCount = 0;
+      openAddToHomeScreen_();
+      return;
+    }
+    __a2hsTapTimer = setTimeout(() => { __a2hsTapCount = 0; }, 1200);
+  });
+}
+
+function isIOS_(){
+  const ua = navigator.userAgent || "";
+  const iOS = /iPad|iPhone|iPod/.test(ua);
+  const isMSStream = (window).MSStream;
+  return iOS && !isMSStream;
+}
+
+function openAddToHomeScreen_(){
+  // close if already open
+  const ex = document.getElementById("a2hsOverlay");
+  if (ex) ex.remove();
+
+  const wrap = document.createElement("div");
+  wrap.id = "a2hsOverlay";
+  wrap.style.position = "fixed";
+  wrap.style.inset = "0";
+  wrap.style.zIndex = "99998";
+  wrap.style.background = "rgba(0,0,0,0.55)";
+  wrap.style.display = "flex";
+  wrap.style.alignItems = "center";
+  wrap.style.justifyContent = "center";
+  wrap.style.padding = "16px";
+
+  const card = document.createElement("div");
+  card.style.width = "min(520px, 100%)";
+  card.style.background = "#0b1220";
+  card.style.border = "1px solid rgba(255,255,255,0.12)";
+  card.style.borderRadius = "16px";
+  card.style.boxShadow = "0 16px 40px rgba(0,0,0,0.55)";
+  card.style.padding = "14px 14px 12px";
+
+  const h = document.createElement("div");
+  h.textContent = "Pievienot sākuma ekrānam";
+  h.style.fontWeight = "700";
+  h.style.fontSize = "18px";
+  h.style.marginBottom = "10px";
+
+  const p = document.createElement("div");
+  p.style.opacity = "0.92";
+  p.style.lineHeight = "1.35";
+  p.style.fontSize = "14px";
+
+  const btnRow = document.createElement("div");
+  btnRow.style.display = "flex";
+  btnRow.style.gap = "10px";
+  btnRow.style.justifyContent = "flex-end";
+  btnRow.style.marginTop = "12px";
+
+  const btnClose = document.createElement("button");
+  btnClose.className = "btn";
+  btnClose.textContent = "AIZVĒRT";
+  btnClose.onclick = () => wrap.remove();
+
+  const btnAdd = document.createElement("button");
+  btnAdd.className = "btn primary";
+  btnAdd.textContent = "PIEVIENOT";
+
+  if (__deferredInstallPrompt) {
+    p.textContent = "Nospied “PIEVIENOT”, lai pievienotu VAJAGMAN kā ikonu uz sākuma ekrāna.";
+    btnAdd.onclick = async () => {
+      try {
+        __deferredInstallPrompt.prompt();
+        await __deferredInstallPrompt.userChoice;
+      } catch(e) {}
+      __deferredInstallPrompt = null;
+      wrap.remove();
+    };
+  } else if (isIOS_()) {
+    p.innerHTML = "iPhone/iPad: atver <b>Share</b> (⤴︎) un izvēlies <b>Add to Home Screen</b>.";
+    btnAdd.style.display = "none";
+  } else {
+    p.textContent = "Atver pārlūka izvēlni un izvēlies “Pievienot sākuma ekrānam” / “Install app”.";
+    btnAdd.style.display = "none";
+  }
+
+  card.appendChild(h);
+  card.appendChild(p);
+  btnRow.appendChild(btnAdd);
+  btnRow.appendChild(btnClose);
+  card.appendChild(btnRow);
+  wrap.appendChild(card);
+
+  wrap.addEventListener("click", (e) => { if (e.target === wrap) wrap.remove(); });
+
+  document.body.appendChild(wrap);
+}
 
 // Admin diagnostics (5 taps on version)
 let __diagTapCount = 0;
@@ -1931,6 +2047,7 @@ function initResumeGuards_(){
 document.addEventListener("DOMContentLoaded", () => {
 
   initDiagnostics_();
+  initAddToHomeScreen_();
   objects = loadObjects();
   addrSystemIds = loadAddrSystemIds();
   currentId = loadCurrentId();
