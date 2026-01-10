@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.2.12";
+const APP_VERSION = "v3.2.13";
 const APP_DATE = "2026-01-09";
 
 
@@ -152,6 +152,7 @@ let userLabel = localStorage.getItem(STORAGE_KEY_PIN_LABEL) || "";
 let dbOnline = false;
 let dbSyncing = false;
 let pendingSync = false; // saglabāts lokāli, bet vēl nav apstiprināts no servera
+let catalogSortMode = localStorage.getItem("vajagman_catalog_sort_v1") || "date";
 
 // Catalog render stability (avoid empty flicker during sync)
 let lastCatalogHtml_ = '';
@@ -1670,6 +1671,34 @@ function switchTab(name){
 }
 
 // Catalog
+
+function initCatalogSortUI_(){
+  const az = document.getElementById("sortAZ");
+  const za = document.getElementById("sortZA");
+  const dt = document.getElementById("sortDATE");
+  if(!az||!za||!dt) return;
+
+  function apply(mode){
+    catalogSortMode = mode;
+    localStorage.setItem("vajagman_catalog_sort_v1", mode);
+    az.classList.toggle("active", mode==="az");
+    za.classList.toggle("active", mode==="za");
+    dt.classList.toggle("active", mode==="date");
+  }
+
+  function setMode(mode){
+    apply(mode);
+    if(activeTab==="catalog") refreshCatalog();
+  }
+
+  az.addEventListener("click", ()=>setMode("az"));
+  za.addEventListener("click", ()=>setMode("za"));
+  dt.addEventListener("click", ()=>setMode("date"));
+
+  // init state (no refresh if not on catalog yet)
+  apply(catalogSortMode || "date");
+}
+
 function refreshCatalog(){
   const root = $("listRoot");
   const q = ($("search").value || "").toLowerCase().trim();
@@ -1683,11 +1712,29 @@ function refreshCatalog(){
     const tb = Date.parse(b.updatedAt||b.createdAt||'') || 0;
     const hasA = ta > 0;
     const hasB = tb > 0;
+
     // Vispirms rādam tos, kam NAV datuma (lokālie / nesinhronizētie)
     if (hasA != hasB) return hasA ? 1 : -1;
-    // Pēc tam tos, kam ir datumi (vissvaigākie augšā)
+
+    const titleA = `${a.OBJEKTA_NR||""} ${a.ADRESE_LOKACIJA||""}`.trim().toLowerCase();
+    const titleB = `${b.OBJEKTA_NR||""} ${b.ADRESE_LOKACIJA||""}`.trim().toLowerCase();
+
+    // Ja abiem nav datuma, turam to pašu secību (alfabēts), lai saraksts nelec
+    if (!hasA && !hasB) {
+      return titleA.localeCompare(titleB, 'lv');
+    }
+
+    if (catalogSortMode === "az") {
+      return titleA.localeCompare(titleB, 'lv');
+    }
+    if (catalogSortMode === "za") {
+      return titleB.localeCompare(titleA, 'lv');
+    }
+
+    // date (default): vissvaigākie augšā
     return tb - ta;
   });
+;;;;
 
   // Avoid empty flicker during short sync windows: if list is temporarily empty while syncing, keep the last visible list.
   const syncingNow = isSyncBusy_();
@@ -1890,6 +1937,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   wireHeaderActions();
   updateHdrActionBar();
+  initCatalogSortUI_();
 
 
   wireHeaderActions();

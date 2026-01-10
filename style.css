@@ -592,3 +592,22 @@ textarea.dirty, input.dirty{ border:2px solid var(--danger); }
   .pinPad{ grid-template-columns: repeat(3, 76px); gap: 12px; }
   .pinKey{ width: 76px; height: 76px; font-size: 24px; }
 }
+
+
+/* Catalog sort buttons in header (only visible in KATALOGS tab) */
+.hdr-sortbar{
+  display:flex;
+  gap:10px;
+  padding: 8px 0;
+}
+.btnSort{
+  height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 900;
+  opacity: 0.95;
+}
+.btnSort.active{
+  border-color: rgba(255,255,255,0.28);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.08) inset;
+}
