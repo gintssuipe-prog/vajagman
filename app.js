@@ -1,6 +1,6 @@
 
-const APP_VERSION = "v3.2.16";
-const APP_DATE = "2026-01-10";
+const APP_VERSION = "v3.2.17";
+const APP_DATE = "2026-01-11";
 
 
 // UI version stamp (single source of truth)
@@ -1020,11 +1020,11 @@ function titleFromRecord(o){
 // - Existing => derive from saved snapshot
 function updateCtxTitle(){
   if (workingIsNew || !currentId){
-    $("ctxTitle").textContent = "—";
+    const _ctxEl = $("ctxTitle"); if (_ctxEl) _ctxEl.textContent = "—";
     return;
   }
   const saved = getSavedById(currentId);
-  $("ctxTitle").textContent = titleFromRecord(saved);
+  const _ctxEl2 = $("ctxTitle"); if (_ctxEl2) _ctxEl2.textContent = titleFromRecord(saved);
 }
 
 function applySystemAddressStyle(){ 
