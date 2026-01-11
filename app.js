@@ -1,5 +1,5 @@
 
-const APP_VERSION = "v3.2.19";
+const APP_VERSION = "v3.2.21";
 const APP_DATE = "2026-01-11";
 
 
@@ -7,6 +7,8 @@ const APP_DATE = "2026-01-11";
 (function syncVersionStamp(){
   const t = document.getElementById("verText");
   if (t) t.textContent = `${APP_VERSION} · ${APP_DATE}`;
+  const pv = document.getElementById("pinVer");
+  if (pv) pv.textContent = `${APP_VERSION} · ${APP_DATE}`;
 })();
 
 
@@ -396,6 +398,7 @@ async function ensureAuth(){
         sessionStorage.setItem(SESSION_OK_KEY, "1");
         if (msg) msg.textContent="OK.";
         hidePinOverlay();
+        try { switchTab("map"); } catch(e) {}
         await fullSync();
         await flushOutbox();
       } else {
@@ -1761,7 +1764,7 @@ function stopAutoWatch(){
 }
 
 // Tabs
-let activeTab = "record";
+let activeTab = "map";
 function switchTab(name){
   if (activeTab === "record" && name !== "record") discardUnsavedChangesIfNeeded();
 
@@ -2082,7 +2085,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Map tab buttons
   $("btnCenterMe").addEventListener("click", () => centerOnMe());
-  $("btnFindNearest").addEventListener("click", () => findNearestToMeAndFocus());
+  const _bn = $("btnFindNearest");
+  if (_bn) _bn.addEventListener("click", () => findNearestToMeAndFocus());
 
   // Validation button in map block (mini map header)
   
